@@ -7,18 +7,14 @@ import cookieParser from "cookie-parser";
 import ErrorHandler from "./utils/errorHandler.js";
 import errorMiddleware from "./middlewares/error.middleware.js";
 import logger from "./utils/logger.js";
+import validateEnv from "./config/validateEnv.js";
 
 // import routes
 // import userRouter from "./routes/user.route.js";
 
 // env check
-const requiredEnv = ["MONGODB_URI", "DB_NAME", "CORS_ORIGIN"];
-requiredEnv.forEach((key) => {
-    if (!process.env[key]) {
-        throw new Error(`Missing required env variable: ${key}`);
-    }
-});
 
+validateEnv();
 const app = express();
 
 app.set("trust proxy", 1);

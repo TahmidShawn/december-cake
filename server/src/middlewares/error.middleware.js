@@ -1,36 +1,56 @@
 import ErrorHandler from "../utils/errorHandler.js";
+import logger from "../utils/logger.js";
 
 const errorMiddleware = (err, req, res, next) => {
-    err.statusCode = err.statusCode || 500;
-    err.message = err.message || "Internal Server Error";
+    let error = err;
 
-    if (err.name === "CastError") {
-        const message = `Resource not found. Invalid: ${err.path}`;
-        err = new ErrorHandler(message, 400);
+    if (error.name === "CastError") {
+        error = new ErrorHandler(
+            `Resource not found. Invalid: ${error.path}`,
+            400,
+        );
     }
 
-    if (err.code === 11000) {
-        const message = `Duplicate ${Object.keys(err.keyValue)} Entered`;
-        err = new ErrorHandler(message, 400);
+    if (error.code === 11000) {
+        const field = Object.keys(error.keyValue)[0];
+        error = new ErrorHandler(`Duplicate ${field} entered`, 400);
     }
 
-    if (err.name === "TokenExpiredError") {
-        const message = "Json Web Token is expired, try again.";
-        err = new ErrorHandler(message, 400);
+    if (error.name === "JsonWebTokenError") {
+        error = new ErrorHandler("Invalid token, please log in again", 401);
     }
 
-    if (err.name === "ValidationError") {
-        const message = Object.values(err.errors)
-            .map((val) => val.message)
-            .join(", ");
-        err = new ErrorHandler(message, 400);
+    if (error.name === "TokenExpiredError") {
+        error = new ErrorHandler("Session expired, please log in again", 401);
     }
 
-    res.status(err.statusCode).json({
+    if (error.name === "ValidationError") {
+        const messages = Object.values(error.errors).map((val) => val.message);
+        error = new ErrorHandler("Validation failed", 400, messages);
+    }
+
+    const statusCode = error.statusCode || 500;
+    const message = error.isOperational
+        ? error.message
+        : "Internal server error";
+
+    if (error.isOperational) {
+        logger.warn(
+            { path: req.originalUrl, statusCode, message: error.message },
+            "Handled request error",
+        );
+    } else {
+        logger.error(
+            { err: error, path: req.originalUrl },
+            "Unhandled server error",
+        );
+    }
+
+    res.status(statusCode).json({
         success: false,
-        message: err.message,
-        errors: err.fieldErrors || null,
-        stack: err.stack,
+        message,
+        errors: error.errors || [],
+        ...(process.env.NODE_ENV !== "production" && { stack: error.stack }),
     });
 };
 
