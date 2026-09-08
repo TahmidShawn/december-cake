@@ -25,7 +25,10 @@ const userSchema = new mongoose.Schema(
         phone: {
             type: String,
             trim: true,
-            match: [/^(\+965)?[569]\d{7}$/, "Please enter a valid Kuwait phone number"],
+            match: [
+                /^(\+965)?[569]\d{7}$/,
+                "Please enter a valid Kuwait phone number",
+            ],
         },
         password: {
             type: String,
@@ -41,8 +44,14 @@ const userSchema = new mongoose.Schema(
         },
 
         isVerified: { type: Boolean, default: false },
-        verifyToken: { type: String, select: false },
-        verifyTokenExpiry: { type: Date, select: false },
+        verifyCode: {
+            type: String,
+            select: false,
+        },
+        verifyCodeExpiry: {
+            type: Date,
+            select: false,
+        },
 
         resetPasswordToken: { type: String, select: false },
         resetPasswordExpire: { type: Date, select: false },
@@ -80,6 +89,7 @@ userSchema.methods.getJwtToken = function getJwtToken() {
 };
 
 userSchema.methods.getRefreshToken = function getRefreshToken() {
+    console.log("REFRESH_TOKEN_SECRET:", process.env.REFRESH_TOKEN_SECRET);
     return jwt.sign({ id: this._id }, process.env.REFRESH_TOKEN_SECRET, {
         expiresIn: process.env.REFRESH_TOKEN_EXPIRE,
     });
@@ -92,9 +102,27 @@ userSchema.methods.comparePassword = async function comparePassword(password) {
 
 userSchema.methods.getResetPasswordToken = function getResetPasswordToken() {
     const resetToken = crypto.randomBytes(20).toString("hex");
-    this.resetPasswordToken = crypto.createHash("sha256").update(resetToken).digest("hex");
+    this.resetPasswordToken = crypto
+        .createHash("sha256")
+        .update(resetToken)
+        .digest("hex");
     this.resetPasswordExpire = Date.now() + 15 * 60 * 1000;
     return resetToken;
+};
+
+userSchema.methods.getVerificationCode = function () {
+    // 6 digit random number (100000–999999)
+    const plainCode = Math.floor(100000 + Math.random() * 900000).toString();
+
+    // hash the plain code before storing
+    this.verifyCode = crypto
+        .createHash("sha256")
+        .update(plainCode)
+        .digest("hex");
+
+    this.verifyCodeExpiry = Date.now() + 1 * 60 * 1000; // 10 min
+
+    return plainCode;
 };
 
 const User = mongoose.models.User || mongoose.model("User", userSchema);
