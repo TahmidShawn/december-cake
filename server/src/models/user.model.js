@@ -44,14 +44,8 @@ const userSchema = new mongoose.Schema(
         },
 
         isVerified: { type: Boolean, default: false },
-        verifyCode: {
-            type: String,
-            select: false,
-        },
-        verifyCodeExpiry: {
-            type: Date,
-            select: false,
-        },
+        verifyCode: { type: String, select: false },
+        verifyCodeExpiry: { type: Date, select: false },
 
         resetPasswordToken: { type: String, select: false },
         resetPasswordExpire: { type: Date, select: false },
@@ -69,8 +63,8 @@ userSchema.set("toJSON", {
         delete ret.password;
         delete ret.resetPasswordToken;
         delete ret.resetPasswordExpire;
-        delete ret.verifyToken;
-        delete ret.verifyTokenExpiry;
+        delete ret.verifyCode;
+        delete ret.verifyCodeExpiry;
         delete ret.refreshToken;
         delete ret.__v;
         return ret;
@@ -89,7 +83,6 @@ userSchema.methods.getJwtToken = function getJwtToken() {
 };
 
 userSchema.methods.getRefreshToken = function getRefreshToken() {
-    console.log("REFRESH_TOKEN_SECRET:", process.env.REFRESH_TOKEN_SECRET);
     return jwt.sign({ id: this._id }, process.env.REFRESH_TOKEN_SECRET, {
         expiresIn: process.env.REFRESH_TOKEN_EXPIRE,
     });
@@ -110,18 +103,13 @@ userSchema.methods.getResetPasswordToken = function getResetPasswordToken() {
     return resetToken;
 };
 
-userSchema.methods.getVerificationCode = function () {
-    // 6 digit random number (100000–999999)
+userSchema.methods.getVerificationCode = function getVerificationCode() {
     const plainCode = Math.floor(100000 + Math.random() * 900000).toString();
-
-    // hash the plain code before storing
     this.verifyCode = crypto
         .createHash("sha256")
         .update(plainCode)
         .digest("hex");
-
-    this.verifyCodeExpiry = Date.now() + 1 * 60 * 1000; // 10 min
-
+    this.verifyCodeExpiry = Date.now() + 10 * 60 * 1000; // 10 minute
     return plainCode;
 };
 

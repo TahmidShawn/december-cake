@@ -33,7 +33,7 @@ router
     .post(authLimiter, validateRequest(loginSchema), loginUser);
 
 // Refresh access token
-router.route("/auth/refresh-token").post(refreshAccessToken);
+router.route("/auth/refresh-token").post(authLimiter, refreshAccessToken);
 
 // Verify email
 router
@@ -59,7 +59,7 @@ router
     .route("/password/reset/:token")
     .put(authLimiter, validateRequest(resetPasswordSchema), resetPassword);
 
-// Logout (requires authentication)
+// Logout
 router.route("/auth/logout").post(isAuthenticatedUser, logout);
 
 export default router;
