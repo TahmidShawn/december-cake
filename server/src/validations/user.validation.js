@@ -1,7 +1,7 @@
 import { z } from "zod";
 
 const email = z
-    .string()
+    .string({ error: "Email is required" })
     .trim()
     .toLowerCase()
     .max(200, "Email cannot exceed 200 characters")
@@ -13,9 +13,7 @@ export const registerSchema = z.object({
         .trim()
         .min(4, "Username must be at least 4 characters")
         .max(30, "Username cannot exceed 30 characters"),
-
     email,
-
     password: z
         .string({ error: "Please enter your password" })
         .min(8, "Password must be at least 8 characters")
@@ -39,7 +37,6 @@ export const resetPasswordSchema = z
             .string({ error: "Please enter your password" })
             .min(8, "Password must be at least 8 characters")
             .max(100, "Password cannot exceed 100 characters"),
-
         confirmPassword: z.string({ error: "Please confirm your password" }),
     })
     .refine((data) => data.password === data.confirmPassword, {
@@ -52,12 +49,10 @@ export const updatePasswordSchema = z
         currentPassword: z
             .string({ error: "Please enter your current password" })
             .min(1, "Please enter your current password"),
-
         newPassword: z
             .string({ error: "Please enter your new password" })
             .min(8, "Password must be at least 8 characters")
             .max(100, "Password cannot exceed 100 characters"),
-
         confirmPassword: z.string({
             error: "Please confirm your new password",
         }),

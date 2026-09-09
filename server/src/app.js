@@ -11,8 +11,9 @@ import validateEnv from "./config/validateEnv.js";
 import { globalLimiter } from "./middlewares/rateLimiter.middleware.js";
 
 // import routes
-import authRouter from "./routes/auth.routes.js";
+import authRouter from "./routes/auth.route.js";
 import userRouter from "./routes/user.route.js";
+import categoryRouter from "./routes/category.route.js";
 
 // env check
 
@@ -50,6 +51,7 @@ app.get("/healthz", (req, res) => {
 
 app.use("/api/v1", authRouter);
 app.use("/api/v1", userRouter);
+app.use("/api/v1", categoryRouter);
 
 app.use((req, res, next) => {
     next(new ErrorHandler(`Cannot ${req.method} ${req.originalUrl}`, 404));
