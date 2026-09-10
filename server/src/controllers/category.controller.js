@@ -53,7 +53,6 @@ export const getCategories = asyncHandler(async (req, res) => {
 
     res.status(200).json({
         success: true,
-        count: categories.length,
         data: categories,
     });
 });
@@ -95,7 +94,10 @@ export const updateCategory = asyncHandler(async (req, res) => {
             ],
         });
         if (duplicate) {
-            throw new ErrorHandler("Category with this name already exists", 409);
+            throw new ErrorHandler(
+                "Category with this name already exists",
+                409,
+            );
         }
     }
 
@@ -118,10 +120,14 @@ export const updateCategory = asyncHandler(async (req, res) => {
     }
 
     try {
-        const updatedCategory = await Category.findByIdAndUpdate(id, updateData, {
-            new: true,
-            runValidators: true,
-        });
+        const updatedCategory = await Category.findByIdAndUpdate(
+            id,
+            updateData,
+            {
+                new: true,
+                runValidators: true,
+            },
+        );
 
         if (newFileId && oldFileId) {
             await deleteFile(oldFileId);
