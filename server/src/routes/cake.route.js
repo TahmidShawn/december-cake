@@ -36,7 +36,7 @@ router
 
 router
     .route("/cakes/:id")
-    .put(
+    .patch(
         authLimiter,
         isAuthenticatedUser,
         authorizeRoles("admin"),
