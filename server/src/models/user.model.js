@@ -53,7 +53,7 @@ const userSchema = new mongoose.Schema(
         refreshToken: { type: String, select: false },
 
         preferredLanguage: { type: String, enum: ["en", "ar"], default: "en" },
-        addresses: [addressSchema],
+        addresses: addressSchema,
     },
     { timestamps: true },
 );

@@ -1,3 +1,4 @@
+
 import Category from "../models/category.model.js";
 import ErrorHandler from "../utils/errorHandler.js";
 import asyncHandler from "../utils/asyncHandler.js";
@@ -53,6 +54,7 @@ export const getCategories = asyncHandler(async (req, res) => {
 
     res.status(200).json({
         success: true,
+        message: "Categories fetched successfully",
         data: categories,
     });
 });
@@ -67,6 +69,7 @@ export const getCategory = asyncHandler(async (req, res) => {
 
     res.status(200).json({
         success: true,
+        message: "Category fetched successfully",
         data: category,
     });
 });
@@ -165,3 +168,4 @@ export const deleteCategory = asyncHandler(async (req, res) => {
         message: "Category deleted successfully",
     });
 });
+
