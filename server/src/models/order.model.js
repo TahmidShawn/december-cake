@@ -20,8 +20,6 @@ const orderSchema = new mongoose.Schema(
             index: true,
         },
 
-        addressId: { type: mongoose.Schema.Types.ObjectId },
-
         shippingAddress: {
             fullName: { type: String, required: true },
             phone: {
@@ -77,8 +75,8 @@ const orderSchema = new mongoose.Schema(
             },
         ],
 
-        preferredDeliveryDate: { type: Date, required: true },
-        preferredDeliveryTimeSlot: { type: String },
+        preferredDeliveryDate: { type: Date, required: true }, // won't implement currently
+        preferredDeliveryTimeSlot: { type: String }, // won't implement currently
 
         paymentMethod: {
             type: String,
@@ -94,7 +92,7 @@ const orderSchema = new mongoose.Schema(
         subtotal: { type: Number, required: true },
         discount: { type: Number, default: 0 },
         deliveryFee: { type: Number, required: true, default: 0 },
-        totalFils: { type: Number, required: true },
+        totalPrice: { type: Number, required: true },
 
         orderStatus: {
             type: String,
