@@ -13,7 +13,6 @@ import {
     createCategorySchema,
     updateCategorySchema,
 } from "../validations/category.validation.js";
-import { authLimiter } from "../middlewares/rateLimiter.middleware.js";
 import upload from "../middlewares/multer.middleware.js";
 
 const router = Router();
@@ -24,7 +23,6 @@ router.route("/categories/:id").get(getCategory);
 router
     .route("/categories")
     .post(
-        authLimiter,
         isAuthenticatedUser,
         authorizeRoles("admin"),
         upload.single("image"),
@@ -35,18 +33,12 @@ router
 router
     .route("/categories/:id")
     .put(
-        authLimiter,
         isAuthenticatedUser,
         authorizeRoles("admin"),
         upload.single("image"),
         validateRequest(updateCategorySchema),
         updateCategory,
     )
-    .delete(
-        authLimiter,
-        isAuthenticatedUser,
-        authorizeRoles("admin"),
-        deleteCategory,
-    );
+    .delete(isAuthenticatedUser, authorizeRoles("admin"), deleteCategory);
 
 export default router;

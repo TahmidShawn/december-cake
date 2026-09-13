@@ -1,6 +1,5 @@
 import mongoose from "mongoose";
 import generateSlug from "../utils/generateSlug.js";
-
 const cakeSchema = new mongoose.Schema(
     {
         name: {
@@ -78,18 +77,18 @@ const cakeSchema = new mongoose.Schema(
                 message: "Size must be either small or medium",
             },
         },
-
-        priceInFils: {
+        price: {
             type: Number,
             required: [true, "Please enter product price"],
             min: [0, "Price cannot be negative"],
             validate: {
-                validator: Number.isInteger,
+                validator: (value) =>
+                    Number.isFinite(value) &&
+                    Number(value.toFixed(3)) === value,
                 message:
-                    "Price must be a whole number of fils (e.g. 15500 for 15.500 KWD)",
+                    "Price must be a valid KWD amount with up to 3 decimal places",
             },
         },
-
         discountPercentage: {
             type: Number,
             default: 0,
@@ -118,41 +117,37 @@ const cakeSchema = new mongoose.Schema(
             transform: (doc, ret) => {
                 delete ret.__v;
                 delete ret.id;
+
+                ret.price = ret.price.toFixed(3);
+
+                if (ret.discountedPrice !== undefined) {
+                    ret.discountedPrice = ret.discountedPrice.toFixed(3);
+                }
+
                 return ret;
             },
         },
         toObject: { virtuals: true },
     },
 );
-
 cakeSchema.pre("validate", function generateCakeSlug() {
     if (this.name?.en && (!this.slug || this.isModified("name.en"))) {
         this.slug = generateSlug(this.name.en);
     }
 });
-
-cakeSchema.virtual("discountedPriceInFils").get(function () {
-    if (!this.discountPercentage) return this.priceInFils;
-    return Math.round(
-        this.priceInFils - (this.priceInFils * this.discountPercentage) / 100,
+cakeSchema.virtual("discountedPrice").get(function () {
+    if (!this.discountPercentage) {
+        return Number(this.price.toFixed(3));
+    }
+    return Number(
+        (this.price - (this.price * this.discountPercentage) / 100).toFixed(3),
     );
 });
-
-cakeSchema.virtual("priceInKWD").get(function () {
-    return (this.priceInFils / 1000).toFixed(3);
-});
-
-cakeSchema.virtual("discountedPriceInKWD").get(function () {
-    return (this.discountedPriceInFils / 1000).toFixed(3);
-});
-
 cakeSchema.virtual("servings").get(function () {
     if (this.weightSize === "small") return "3-4";
     if (this.weightSize === "medium") return "8-12";
     return null;
 });
-
 cakeSchema.index({ "name.en": "text", "name.ar": "text" });
-
 const Cake = mongoose.models.Cake || mongoose.model("Cake", cakeSchema);
 export default Cake;

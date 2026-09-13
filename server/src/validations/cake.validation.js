@@ -3,19 +3,36 @@ import { z } from "zod";
 const booleanField = z
     .string()
     .optional()
-    .transform((val) => val === "true" || val === "1");
-
-const positiveIntegerString = (fieldName) =>
-    z
-        .string({ error: `${fieldName} is required` })
-        .regex(/^\d+$/, `${fieldName} must be a valid integer`)
-        .transform(Number);
+    .transform((val) =>
+        val === undefined ? undefined : val === "true" || val === "1",
+    );
 
 const nonNegativeIntegerString = (fieldName) =>
     z
         .string({ error: `${fieldName} is required` })
         .regex(/^\d+$/, `${fieldName} must be a valid integer`)
         .transform(Number);
+
+const kwdPrice = z
+    .string({ error: "Price is required" })
+    .trim()
+    .regex(
+        /^\d+(\.\d{1,3})?$/,
+        "Price must be a valid KWD amount with up to 3 decimal places",
+    )
+    .refine((value) => Number(value) >= 0, "Price cannot be negative")
+    .transform(Number);
+
+const optionalKwdPrice = z
+    .string()
+    .trim()
+    .regex(
+        /^\d+(\.\d{1,3})?$/,
+        "Price must be a valid KWD amount with up to 3 decimal places",
+    )
+    .refine((value) => Number(value) >= 0, "Price cannot be negative")
+    .transform(Number)
+    .optional();
 
 const percentageString = z
     .string()
@@ -73,14 +90,16 @@ export const createCakeSchema = z.object({
             "mango",
             "pistachio",
         ],
-        { error: "Please select a valid cake flavor" },
+        {
+            error: "Please select a valid cake flavor",
+        },
     ),
 
     weightSize: z.enum(["small", "medium"], {
         error: "Size must be either small or medium",
     }),
 
-    priceInFils: nonNegativeIntegerString("Price"),
+    price: kwdPrice,
 
     discountPercentage: percentageString,
 
@@ -153,7 +172,7 @@ export const updateCakeSchema = z.object({
 
     weightSize: z.enum(["small", "medium"]).optional(),
 
-    priceInFils: nonNegativeIntegerString("Price").optional(),
+    price: optionalKwdPrice,
 
     discountPercentage: percentageString,
 

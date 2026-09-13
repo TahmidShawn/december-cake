@@ -15,6 +15,7 @@ import authRouter from "./routes/auth.route.js";
 import userRouter from "./routes/user.route.js";
 import categoryRouter from "./routes/category.route.js";
 import cakeRouter from "./routes/cake.route.js";
+import cartRouter from "./routes/cart.route.js";
 
 // env check
 
@@ -24,7 +25,25 @@ const app = express();
 app.set("trust proxy", 1);
 
 app.use(helmet());
-app.use(pinoHttp({ logger }));
+
+app.use(
+    pinoHttp({
+        logger,
+        serializers: {
+            req(req) {
+                return { method: req.method, url: req.url };
+            },
+            res(res) {
+                return { statusCode: res.statusCode };
+            },
+        },
+        customSuccessMessage: (req, res, responseTime) =>
+            `${req.method} ${req.url} ${res.statusCode} - ${responseTime}ms`,
+        autoLogging: {
+            ignore: (req) => req.url === "/health",
+        },
+    }),
+);
 
 app.use(
     cors({
@@ -54,6 +73,7 @@ app.use("/api/v1", authRouter);
 app.use("/api/v1", userRouter);
 app.use("/api/v1", categoryRouter);
 app.use("/api/v1", cakeRouter);
+app.use("/api/v1", cartRouter);
 
 app.use((req, res, next) => {
     next(new ErrorHandler(`Cannot ${req.method} ${req.originalUrl}`, 404));

@@ -32,11 +32,32 @@ const cartSchema = new mongoose.Schema(
             },
         },
     },
-    { timestamps: true },
+    {
+        timestamps: true,
+        toJSON: {
+            transform: (doc, ret) => {
+                delete ret._id;
+                delete ret.user;
+                delete ret.__v;
+                delete ret.createdAt;
+                delete ret.updatedAt;
+
+                return ret;
+            },
+        },
+    },
 );
 
 // clean up in 60 days if unused
-cartSchema.index({ updatedAt: 1 }, { expireAfterSeconds: 60 * 24 * 60 * 60 });
+cartSchema.index(
+    {
+        updatedAt: 1,
+    },
+    {
+        expireAfterSeconds: 60 * 24 * 60 * 60,
+    },
+);
 
 const Cart = mongoose.models.Cart || mongoose.model("Cart", cartSchema);
+
 export default Cart;

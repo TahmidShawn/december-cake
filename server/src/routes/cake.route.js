@@ -15,7 +15,6 @@ import {
     createCakeSchema,
     updateCakeSchema,
 } from "../validations/cake.validation.js";
-import { authLimiter } from "../middlewares/rateLimiter.middleware.js";
 import upload from "../middlewares/multer.middleware.js";
 
 const router = Router();
@@ -26,7 +25,6 @@ router.route("/cakes/:id").get(getCake);
 router
     .route("/cakes")
     .post(
-        authLimiter,
         isAuthenticatedUser,
         authorizeRoles("admin"),
         upload.array("images"),
@@ -37,18 +35,12 @@ router
 router
     .route("/cakes/:id")
     .patch(
-        authLimiter,
         isAuthenticatedUser,
         authorizeRoles("admin"),
         upload.array("images"),
         validateRequest(updateCakeSchema),
         updateCake,
     )
-    .delete(
-        authLimiter,
-        isAuthenticatedUser,
-        authorizeRoles("admin"),
-        deleteCake,
-    );
+    .delete(isAuthenticatedUser, authorizeRoles("admin"), deleteCake);
 
 export default router;

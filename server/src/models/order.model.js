@@ -70,9 +70,9 @@ const orderSchema = new mongoose.Schema(
                     ],
                     trim: true,
                 },
-                pricePerUnitFils: { type: Number, required: true },
+                price: { type: Number, required: true },
                 quantity: { type: Number, required: true, min: 1 },
-                totalPriceFils: { type: Number, required: true },
+                totalPrice: { type: Number, required: true },
                 _id: false,
             },
         ],
@@ -91,9 +91,9 @@ const orderSchema = new mongoose.Schema(
             default: "pending",
         },
 
-        subtotalFils: { type: Number, required: true },
-        discountFils: { type: Number, default: 0 },
-        deliveryFeeFils: { type: Number, required: true, default: 0 },
+        subtotal: { type: Number, required: true },
+        discount: { type: Number, default: 0 },
+        deliveryFee: { type: Number, required: true, default: 0 },
         totalFils: { type: Number, required: true },
 
         orderStatus: {

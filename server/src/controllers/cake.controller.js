@@ -50,7 +50,7 @@ export const createCake = asyncHandler(async (req, res) => {
         category,
         flavor,
         weightSize,
-        priceInFils,
+        price,
         discountPercentage,
         stock,
         isCustomAvailable,
@@ -95,7 +95,7 @@ export const createCake = asyncHandler(async (req, res) => {
             category,
             flavor,
             weightSize,
-            priceInFils,
+            price,
             discountPercentage,
             stock,
             isCustomAvailable,
@@ -157,7 +157,7 @@ export const updateCake = asyncHandler(async (req, res) => {
         category,
         flavor,
         weightSize,
-        priceInFils,
+        price,
         discountPercentage,
         stock,
         isCustomAvailable,
@@ -235,8 +235,8 @@ export const updateCake = asyncHandler(async (req, res) => {
         updateData.weightSize = weightSize;
     }
 
-    if (priceInFils !== undefined) {
-        updateData.priceInFils = priceInFils;
+    if (price !== undefined) {
+        updateData.price = price;
     }
 
     if (discountPercentage !== undefined) {
