@@ -1,45 +1,45 @@
 import { Router } from "express";
 import {
-    createCategory,
-    getCategories,
-    getCategory,
-    updateCategory,
-    deleteCategory,
-} from "../controllers/category.controller.js";
+    createAddOn,
+    getAddOns,
+    getAddOn,
+    updateAddOn,
+    deleteAddOn,
+} from "../controllers/addOn.controller.js";
 import {
     isAuthenticatedUser,
     authorizeRoles,
 } from "../middlewares/auth.middleware.js";
 import { validateRequest } from "../middlewares/validation.middleware.js";
 import {
-    createCategorySchema,
-    updateCategorySchema,
-} from "../validations/category.validation.js";
+    createAddOnSchema,
+    updateAddOnSchema,
+} from "../validations/addOn.validation.js";
 import upload from "../middlewares/multer.middleware.js";
 
 const router = Router();
 
 router
-    .route("/categories")
-    .get(getCategories)
+    .route("/add-ons")
+    .get(getAddOns)
     .post(
         isAuthenticatedUser,
         authorizeRoles("admin"),
         upload.single("image"),
-        validateRequest(createCategorySchema),
-        createCategory,
+        validateRequest(createAddOnSchema),
+        createAddOn,
     );
 
 router
-    .route("/categories/:id")
-    .get(getCategory)
+    .route("/add-ons/:id")
+    .get(getAddOn)
     .put(
         isAuthenticatedUser,
         authorizeRoles("admin"),
         upload.single("image"),
-        validateRequest(updateCategorySchema),
-        updateCategory,
+        validateRequest(updateAddOnSchema),
+        updateAddOn,
     )
-    .delete(isAuthenticatedUser, authorizeRoles("admin"), deleteCategory);
+    .delete(isAuthenticatedUser, authorizeRoles("admin"), deleteAddOn);
 
 export default router;

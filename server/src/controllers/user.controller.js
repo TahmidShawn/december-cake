@@ -17,11 +17,13 @@ export const updatePassword = asyncHandler(async (req, res) => {
     const isPasswordMatched = await user.comparePassword(
         req.body.currentPassword,
     );
+
     if (!isPasswordMatched) {
         throw new ErrorHandler("Current password is incorrect", 401);
     }
 
     user.password = req.body.newPassword;
+
     await user.save();
 
     await sendToken(user, 200, res, "Password updated successfully");

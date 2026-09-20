@@ -16,6 +16,9 @@ import userRouter from "./routes/user.route.js";
 import categoryRouter from "./routes/category.route.js";
 import cakeRouter from "./routes/cake.route.js";
 import cartRouter from "./routes/cart.route.js";
+import orderRouter from "./routes/order.route.js";
+import paymentRouter from "./routes/payment.route.js";
+import addOnRouter from "./routes/addOn.route.js";
 
 // env check
 
@@ -74,6 +77,9 @@ app.use("/api/v1", userRouter);
 app.use("/api/v1", categoryRouter);
 app.use("/api/v1", cakeRouter);
 app.use("/api/v1", cartRouter);
+app.use("/api/v1", orderRouter);
+app.use("/api/v1", paymentRouter);
+app.use("/api/v1", addOnRouter);
 
 app.use((req, res, next) => {
     next(new ErrorHandler(`Cannot ${req.method} ${req.originalUrl}`, 404));

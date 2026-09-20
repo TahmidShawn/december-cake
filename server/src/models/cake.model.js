@@ -130,11 +130,13 @@ const cakeSchema = new mongoose.Schema(
         toObject: { virtuals: true },
     },
 );
+
 cakeSchema.pre("validate", function generateCakeSlug() {
     if (this.name?.en && (!this.slug || this.isModified("name.en"))) {
         this.slug = generateSlug(this.name.en);
     }
 });
+
 cakeSchema.virtual("discountedPrice").get(function () {
     if (!this.discountPercentage) {
         return Number(this.price.toFixed(3));
@@ -143,11 +145,14 @@ cakeSchema.virtual("discountedPrice").get(function () {
         (this.price - (this.price * this.discountPercentage) / 100).toFixed(3),
     );
 });
+
 cakeSchema.virtual("servings").get(function () {
     if (this.weightSize === "small") return "3-4";
     if (this.weightSize === "medium") return "8-12";
     return null;
 });
+
 cakeSchema.index({ "name.en": "text", "name.ar": "text" });
+
 const Cake = mongoose.models.Cake || mongoose.model("Cake", cakeSchema);
 export default Cake;

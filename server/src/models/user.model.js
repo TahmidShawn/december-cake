@@ -2,7 +2,6 @@ import mongoose from "mongoose";
 import jwt from "jsonwebtoken";
 import bcrypt from "bcrypt";
 import crypto from "crypto";
-import addressSchema from "./address.model.js";
 
 const userSchema = new mongoose.Schema(
     {
@@ -40,7 +39,7 @@ const userSchema = new mongoose.Schema(
         role: {
             type: String,
             enum: ["user", "admin"],
-            default: "user",
+            default: "admin",
         },
 
         isVerified: { type: Boolean, default: false },
@@ -53,7 +52,6 @@ const userSchema = new mongoose.Schema(
         refreshToken: { type: String, select: false },
 
         preferredLanguage: { type: String, enum: ["en", "ar"], default: "en" },
-        address: addressSchema,
     },
     { timestamps: true },
 );

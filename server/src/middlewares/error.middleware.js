@@ -4,7 +4,7 @@ import logger from "../utils/logger.js";
 const errorMiddleware = (err, req, res, next) => {
     let error = err;
 
-    if (err.code && err.code.startsWith("LIMIT_")) {
+    if (typeof err.code === "string" && err.code.startsWith("LIMIT_")) {
         let message = "File upload error";
         switch (err.code) {
             case "LIMIT_FILE_SIZE":
