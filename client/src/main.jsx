@@ -3,11 +3,14 @@ import { createRoot } from "react-dom/client";
 import { BrowserRouter } from "react-router";
 import "./index.css";
 import Router from "./router/Router";
+import { LanguageProvider } from "./context/LanguageContext";
 
 createRoot(document.getElementById("root")).render(
     <StrictMode>
         <BrowserRouter>
-            <Router />
+            <LanguageProvider>
+                <Router />
+            </LanguageProvider>
         </BrowserRouter>
     </StrictMode>,
 );

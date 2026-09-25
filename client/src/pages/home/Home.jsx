@@ -1,8 +1,13 @@
+import CakeBanner from "./banner/CakeBanner";
+import Category from "./category/Category";
+import HotDeals from "./hotDeals/HotDeals";
+
 const Home = () => {
     return (
         <div>
-            <h1>Welcome to Our Store</h1>
-            <p>Discover our range of products and enjoy great deals!</p>
+            <CakeBanner />
+            <Category />
+            <HotDeals />
         </div>
     );
 };
