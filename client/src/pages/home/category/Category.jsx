@@ -1,4 +1,3 @@
-import ViewAllButton from "@/components/shared/button/ViewAllButton"
 import { useLanguage } from "@/context/LanguageContext";
 
 const categories = [
@@ -129,10 +128,6 @@ const Category = () => {
                                 : "Browse our selection of cakes crafted for every occasion."}
                         </p>
                     </div>
-
-                    <ViewAllButton className="hidden md:flex">
-                        {language === "ar" ? "عرض الكل" : "View all"}
-                    </ViewAllButton>
                 </div>
 
                 {/* Category Grid */}
@@ -185,13 +180,6 @@ const Category = () => {
                         </article>
                     ))}
                 </div>
-
-                {/* Mobile View All */}
-                <ViewAllButton className="mt-6 w-full md:hidden">
-                    {language === "ar"
-                        ? "عرض جميع الفئات"
-                        : "View all categories"}
-                </ViewAllButton>
             </div>
         </section>
     );

@@ -2,7 +2,7 @@ import { ArrowUpRight } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 
-const ViewAllButton = ({ children, className = "" }) => {
+const SecondaryButton = ({ children, className = "" }) => {
     return (
         <Button
             variant="outline-asymmetric"
@@ -18,4 +18,4 @@ const ViewAllButton = ({ children, className = "" }) => {
     );
 };
 
-export default ViewAllButton;
+export default SecondaryButton;

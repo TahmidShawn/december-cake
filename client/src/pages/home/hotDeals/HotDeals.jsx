@@ -1,7 +1,8 @@
+
 import { Plus } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
-import ViewAllButton from "@/components/shared/button/ViewAllButton";
+import ViewAllButton from "@/components/shared/button/SecondaryButton";
 import { useLanguage } from "@/context/LanguageContext";
 
 const hotDeals = [
@@ -13,6 +14,10 @@ const hotDeals = [
         category: {
             en: "Chocolate",
             ar: "شوكولاتة",
+        },
+        variant: {
+            en: "Medium",
+            ar: "متوسط",
         },
         price: 8.5,
         oldPrice: 11,
@@ -28,6 +33,10 @@ const hotDeals = [
             en: "Birthday",
             ar: "أعياد الميلاد",
         },
+        variant: {
+            en: "Small",
+            ar: "صغير",
+        },
         price: 9.5,
         oldPrice: 12,
         discount: 21,
@@ -41,6 +50,10 @@ const hotDeals = [
         category: {
             en: "Red Velvet",
             ar: "ريد فيلفت",
+        },
+        variant: {
+            en: "Medium",
+            ar: "متوسط",
         },
         price: 10,
         oldPrice: 13,
@@ -56,6 +69,10 @@ const hotDeals = [
             en: "Cheesecake",
             ar: "تشيز كيك",
         },
+        variant: {
+            en: "Small",
+            ar: "صغير",
+        },
         price: 8,
         oldPrice: 10.5,
         discount: 24,
@@ -69,6 +86,10 @@ const hotDeals = [
         category: {
             en: "Caramel",
             ar: "كراميل",
+        },
+        variant: {
+            en: "Medium",
+            ar: "متوسط",
         },
         price: 9,
         oldPrice: 11.5,
@@ -84,6 +105,10 @@ const hotDeals = [
             en: "Fruit",
             ar: "فواكه",
         },
+        variant: {
+            en: "Medium",
+            ar: "متوسط",
+        },
         price: 10.5,
         oldPrice: 14,
         discount: 25,
@@ -98,6 +123,10 @@ const hotDeals = [
             en: "Mini Cake",
             ar: "كعكة صغيرة",
         },
+        variant: {
+            en: "Small",
+            ar: "صغير",
+        },
         price: 5.5,
         oldPrice: 7,
         discount: 21,
@@ -111,6 +140,10 @@ const hotDeals = [
         category: {
             en: "Wedding",
             ar: "زفاف",
+        },
+        variant: {
+            en: "Medium",
+            ar: "متوسط",
         },
         price: 18,
         oldPrice: 18,
@@ -169,11 +202,20 @@ const HotDeals = () => {
                                     loading="lazy"
                                 />
 
+                                {/* Discount Badge */}
                                 {cake.discount > 0 && (
-                                    <span className="absolute top-3 inset-s-3 rounded-none rounded-tl-xl rounded-br-xl bg-primary px-2.5 py-1.5 text-[10px] font-bold text-primary-foreground">
+                                    <span
+                                        dir="ltr"
+                                        className="absolute top-3 inset-s-3 rounded-none rounded-tl-xl rounded-br-xl bg-primary px-2.5 py-1.5 text-[10px] font-bold text-primary-foreground"
+                                    >
                                         -{cake.discount}%
                                     </span>
                                 )}
+
+                                {/* Variant Badge */}
+                                <span className="absolute bottom-3 inset-e-3 rounded-none rounded-tl-xl rounded-br-xl border border-white/40 bg-background/90 px-2.5 py-1.5 text-[10px] font-bold text-foreground shadow-sm backdrop-blur-sm">
+                                    {cake.variant[language]}
+                                </span>
                             </div>
 
                             <div className="p-3.5 md:p-4">
@@ -218,7 +260,9 @@ const HotDeals = () => {
 
                 {/* Mobile View All */}
                 <ViewAllButton className="mt-6 w-full md:hidden">
-                    {language === "ar" ? "عرض جميع العروض" : "View all deals"}
+                    {language === "ar"
+                        ? "عرض جميع العروض"
+                        : "View all deals"}
                 </ViewAllButton>
             </div>
         </section>
