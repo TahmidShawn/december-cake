@@ -1,3 +1,4 @@
+
 import { useState } from "react";
 import {
     ArrowRight,
@@ -297,7 +298,6 @@ const Cart = () => {
         );
     };
 
-    // Clicking + on an unselected add-on automatically selects it.
     const increaseAddOnQuantity = (id) => {
         if (!selectedAddOns.includes(id)) {
             setSelectedAddOns((current) => [...current, id]);
@@ -432,11 +432,7 @@ const Cart = () => {
 
                                 <span className="text-sm font-semibold text-muted-foreground">
                                     {selectedItemsCount}{" "}
-                                    {isArabic
-                                        ? "محدد"
-                                        : selectedItemsCount === 1
-                                          ? "selected"
-                                          : "selected"}
+                                    {isArabic ? "محدد" : "selected"}
                                 </span>
                             </div>
 
@@ -491,7 +487,7 @@ const Cart = () => {
                                 id="cart-add-ons"
                                 className="mt-10 scroll-mt-24"
                             >
-                                <div className="rounded-none rounded-tl-3xl rounded-br-3xl border border-primary/20 bg-secondary/35 p-5 md:p-6">
+                                <div className="rounded-none rounded-tl-3xl rounded-br-3xl border border-primary/20 bg-secondary/35 p-4 md:p-6">
                                     <div className="flex flex-col gap-5 md:flex-row md:items-center md:justify-between">
                                         <div className="max-w-xl">
                                             <div className="flex items-center gap-2 text-primary">
@@ -581,7 +577,7 @@ const Cart = () => {
                                         </Dialog>
                                     </div>
 
-                                    <div className="mt-5 grid grid-cols-2 gap-3 md:grid-cols-3">
+                                    <div className="mt-5 grid grid-cols-2 gap-2.5 sm:gap-3 lg:grid-cols-3">
                                         {featuredAddOns.map((addOn) => (
                                             <FeaturedAddOn
                                                 key={addOn.id}
@@ -795,18 +791,18 @@ const CartItem = ({
 
     return (
         <div
-            className={`rounded-none rounded-tl-2xl rounded-br-2xl border p-4 shadow-sm transition-all md:p-5 ${
+            className={`rounded-none rounded-tl-2xl rounded-br-2xl border p-3 shadow-sm transition-all sm:p-4 md:p-5 ${
                 selected
                     ? "border-border bg-background"
                     : "border-border/60 bg-muted/30 opacity-65"
             }`}
         >
-            <div className="flex gap-3 md:gap-4">
+            <div className="flex gap-2.5 sm:gap-3 md:gap-4">
                 <div className="flex shrink-0 items-start pt-1">
                     <Checkbox checked={selected} onCheckedChange={onToggle} />
                 </div>
 
-                <div className="size-20 shrink-0 overflow-hidden rounded-none rounded-tl-xl rounded-br-xl bg-secondary md:size-28">
+                <div className="size-16 shrink-0 overflow-hidden rounded-none rounded-tl-xl rounded-br-xl bg-secondary sm:size-20 md:size-28">
                     <img
                         src={item.image}
                         alt={item.name[language]}
@@ -815,17 +811,17 @@ const CartItem = ({
                 </div>
 
                 <div className="min-w-0 flex-1">
-                    <div className="flex items-start justify-between gap-3">
+                    <div className="flex items-start justify-between gap-2 sm:gap-3">
                         <div className="min-w-0">
-                            <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-primary">
+                            <p className="text-[9px] font-bold uppercase tracking-[0.12em] text-primary sm:text-[10px]">
                                 {item.size[language]}
                             </p>
 
-                            <h2 className="mt-1 line-clamp-2 text-sm font-bold leading-5 md:text-lg md:leading-6">
+                            <h2 className="mt-1 line-clamp-2 text-xs font-bold leading-4 sm:text-sm sm:leading-5 md:text-lg md:leading-6">
                                 {item.name[language]}
                             </h2>
 
-                            <p className="mt-1 text-xs text-muted-foreground">
+                            <p className="mt-1 text-[11px] text-muted-foreground sm:text-xs">
                                 {isArabic
                                     ? `${item.servings} حصص`
                                     : `${item.servings} servings`}
@@ -839,35 +835,38 @@ const CartItem = ({
                             onClick={onRemove}
                             className="size-7 shrink-0 text-muted-foreground hover:text-destructive"
                         >
-                            <Trash2 className="size-4" />
+                            <Trash2 className="size-3.5 sm:size-4" />
                         </Button>
                     </div>
 
-                    <div className="mt-3 flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
+                    <div className="mt-2.5 flex flex-col gap-2.5 sm:mt-3 sm:gap-3 md:flex-row md:items-end md:justify-between">
                         <div>
-                            <div className="flex flex-wrap items-center gap-2">
-                                <span dir="ltr" className="text-sm font-bold">
+                            <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
+                                <span
+                                    dir="ltr"
+                                    className="text-xs font-bold sm:text-sm"
+                                >
                                     {item.discountedPrice.toFixed(3)} KWD
                                 </span>
 
                                 {item.discountPercentage > 0 && (
                                     <span
                                         dir="ltr"
-                                        className="text-xs text-muted-foreground line-through"
+                                        className="text-[10px] text-muted-foreground line-through sm:text-xs"
                                     >
                                         {item.price.toFixed(3)} KWD
                                     </span>
                                 )}
                             </div>
 
-                            <div className="mt-1 flex items-baseline gap-2">
-                                <span className="text-[11px] text-muted-foreground">
+                            <div className="mt-1 flex items-baseline gap-1.5 sm:gap-2">
+                                <span className="text-[10px] text-muted-foreground sm:text-[11px]">
                                     {isArabic ? "إجمالي المنتج" : "Item total"}
                                 </span>
 
                                 <span
                                     dir="ltr"
-                                    className="text-base font-black"
+                                    className="text-sm font-black sm:text-base"
                                 >
                                     {lineTotal.toFixed(3)} KWD
                                 </span>
@@ -914,7 +913,7 @@ const FeaturedAddOn = ({
                     onToggle();
                 }
             }}
-            className={`cursor-pointer overflow-hidden rounded-none rounded-tl-2xl rounded-br-2xl border transition-all ${
+            className={`min-w-0 cursor-pointer overflow-hidden rounded-none rounded-tl-2xl rounded-br-2xl border transition-all ${
                 selected
                     ? "border-primary/60 bg-primary/[0.05]"
                     : "border-border bg-card hover:border-primary/30"
@@ -927,7 +926,7 @@ const FeaturedAddOn = ({
                     className="h-full w-full object-cover"
                 />
 
-                <div className="absolute left-3 top-3">
+                <div className="absolute left-2 top-2 sm:left-3 sm:top-3">
                     <SelectionIndicator
                         selected={selected}
                         onToggle={onToggle}
@@ -935,17 +934,22 @@ const FeaturedAddOn = ({
                 </div>
             </div>
 
-            <div className="p-4">
-                <h3 className="text-sm font-bold md:text-base">
-                    {addOn.name[language]}
-                </h3>
+            <div className="p-2.5 sm:p-3 md:p-4">
+                <div className="min-w-0">
+                    <h3 className="truncate text-xs font-bold sm:text-sm md:text-base">
+                        {addOn.name[language]}
+                    </h3>
 
-                <p dir="ltr" className="mt-1 text-sm font-bold text-primary">
-                    +{addOn.price.toFixed(3)} KWD
-                </p>
+                    <p
+                        dir="ltr"
+                        className="mt-1 text-xs font-bold text-primary sm:text-sm"
+                    >
+                        +{addOn.price.toFixed(3)} KWD
+                    </p>
+                </div>
 
-                <div className="mt-4 flex items-center justify-between gap-3 border-t border-border/70 pt-3">
-                    <span className="text-xs font-semibold text-muted-foreground">
+                <div className="mt-3 flex flex-col gap-2 border-t border-border/70 pt-3 sm:mt-4 sm:gap-2.5">
+                    <span className="text-[10px] font-semibold text-muted-foreground sm:text-xs">
                         {language === "ar" ? "الكمية" : "Quantity"}
                     </span>
 
@@ -990,7 +994,7 @@ const AddOnCard = ({
                     onToggle();
                 }
             }}
-            className={`cursor-pointer rounded-none rounded-tl-2xl rounded-br-2xl border p-3 transition-all ${
+            className={`min-w-0 cursor-pointer rounded-none rounded-tl-2xl rounded-br-2xl border p-3 transition-all ${
                 selected
                     ? "border-primary/50 bg-primary/[0.04]"
                     : "border-border bg-card hover:border-primary/30"
@@ -1054,13 +1058,13 @@ const SelectionIndicator = ({ selected, onToggle }) => {
                 event.stopPropagation();
                 onToggle();
             }}
-            className={`flex size-7 shrink-0 items-center justify-center rounded-full border-2 transition-all ${
+            className={`flex size-6 shrink-0 items-center justify-center rounded-full border-2 transition-all sm:size-7 ${
                 selected
                     ? "border-primary bg-primary text-primary-foreground"
                     : "border-muted-foreground/35 bg-background hover:border-primary/60"
             }`}
         >
-            {selected && <Check className="size-3.5" />}
+            {selected && <Check className="size-3 sm:size-3.5" />}
         </button>
     );
 };
@@ -1074,7 +1078,7 @@ const QuantityControl = ({
 }) => {
     return (
         <div
-            className={`flex shrink-0 items-center rounded-none rounded-tl-lg rounded-br-lg border border-border bg-background ${
+            className={`flex w-fit shrink-0 items-center rounded-none rounded-tl-lg rounded-br-lg border border-border bg-background ${
                 compact ? "h-8" : "h-9"
             } ${disabled ? "opacity-50" : ""}`}
             onClick={(event) => event.stopPropagation()}
@@ -1087,7 +1091,7 @@ const QuantityControl = ({
                 onClick={onDecrease}
                 className={`${compact ? "size-7" : "size-8"} rounded-none`}
             >
-                <Minus className="size-3.5" />
+                <Minus className="size-3" />
             </Button>
 
             <span
@@ -1107,7 +1111,7 @@ const QuantityControl = ({
                 onClick={onIncrease}
                 className={`${compact ? "size-7" : "size-8"} rounded-none`}
             >
-                <Plus className="size-3.5" />
+                <Plus className="size-3" />
             </Button>
         </div>
     );
@@ -1117,7 +1121,9 @@ const SummaryItem = ({ name, quantity, unitPrice, lineTotal }) => {
     return (
         <div className="rounded-none rounded-tl-xl rounded-br-xl bg-secondary/35 p-3">
             <div className="flex items-start justify-between gap-3">
-                <p className="min-w-0 truncate text-sm font-semibold">{name}</p>
+                <p className="min-w-0 truncate text-sm font-semibold">
+                    {name}
+                </p>
 
                 <span dir="ltr" className="shrink-0 text-sm font-black">
                     {lineTotal.toFixed(3)} KWD
