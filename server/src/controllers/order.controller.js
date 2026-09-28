@@ -257,7 +257,7 @@ export const createOrder = asyncHandler(async (req, res) => {
             createdOrder = order;
         });
 
-        res.status(201).json({
+        return res.status(201).json({
             success: true,
             message:
                 paymentMethod === "online"
@@ -309,7 +309,7 @@ export const cancelMyOrder = asyncHandler(async (req, res) => {
     const session = await mongoose.startSession();
 
     try {
-        let updatedOrder;
+        let cancelledOrder;
 
         await session.withTransaction(async () => {
             const order = await Order.findOne({
@@ -321,14 +321,20 @@ export const cancelMyOrder = asyncHandler(async (req, res) => {
                 throw new ErrorHandler("Order not found", 404);
             }
 
-            if (order.orderStatus !== "pending") {
+            if (order.paymentMethod !== "cash_on_delivery") {
                 throw new ErrorHandler(
-                    "This order can no longer be cancelled",
+                    "Online orders cannot be cancelled",
                     400,
                 );
             }
 
-            // restore reserved cake stock
+            if (order.orderStatus !== "pending") {
+                throw new ErrorHandler(
+                    "Only pending COD orders can be cancelled",
+                    400,
+                );
+            }
+
             for (const item of order.items) {
                 await Cake.updateOne(
                     {
@@ -345,26 +351,22 @@ export const cancelMyOrder = asyncHandler(async (req, res) => {
 
             order.orderStatus = "cancelled";
             order.cancelledAt = new Date();
-
-            order.cancellationReason =
-                typeof req.body.reason === "string" && req.body.reason.trim()
-                    ? req.body.reason.trim()
-                    : "Cancelled by customer";
+            order.cancellationReason = "Cancelled by customer";
 
             order.statusHistory.push({
                 status: "cancelled",
-                note: order.cancellationReason,
+                note: "Order cancelled by customer",
             });
 
             await order.save({ session });
 
-            updatedOrder = order;
+            cancelledOrder = order;
         });
 
-        res.status(200).json({
+        return res.status(200).json({
             success: true,
             message: "Order cancelled successfully",
-            data: updatedOrder,
+            data: cancelledOrder,
         });
     } finally {
         await session.endSession();
@@ -406,7 +408,7 @@ export const getOrder = asyncHandler(async (req, res) => {
 
 export const updateOrderStatus = asyncHandler(async (req, res) => {
     const { id } = req.params;
-    const { status, note } = req.body;
+    const { status } = req.body;
 
     if (!ORDER_STATUSES.includes(status)) {
         throw new ErrorHandler("Invalid order status", 400);
@@ -424,31 +426,31 @@ export const updateOrderStatus = asyncHandler(async (req, res) => {
                 throw new ErrorHandler("Order not found", 404);
             }
 
-            if (order.orderStatus === status) {
-                throw new ErrorHandler(`Order is already ${status}`, 400);
-            }
-
-            // final statuses cannot be changed
             if (
                 order.orderStatus === "delivered" ||
                 order.orderStatus === "cancelled"
             ) {
                 throw new ErrorHandler(
-                    "This order can no longer be updated",
+                    "Finalized orders cannot be updated",
                     400,
                 );
             }
 
-            // cancellation only while pending
-            if (status === "cancelled" && order.orderStatus !== "pending") {
-                throw new ErrorHandler(
-                    "This order can no longer be cancelled",
-                    400,
-                );
-            }
-
-            // restore reserved cake stock
             if (status === "cancelled") {
+                if (order.paymentMethod !== "cash_on_delivery") {
+                    throw new ErrorHandler(
+                        "Online orders cannot be cancelled",
+                        400,
+                    );
+                }
+
+                if (order.orderStatus !== "pending") {
+                    throw new ErrorHandler(
+                        "Only pending COD orders can be cancelled",
+                        400,
+                    );
+                }
+
                 for (const item of order.items) {
                     await Cake.updateOne(
                         {
@@ -464,30 +466,62 @@ export const updateOrderStatus = asyncHandler(async (req, res) => {
                 }
 
                 order.cancelledAt = new Date();
+                order.cancellationReason = "Cancelled by admin";
 
-                order.cancellationReason =
-                    typeof note === "string" && note.trim()
-                        ? note.trim()
-                        : "Cancelled by administrator";
+                order.statusHistory.push({
+                    status: "cancelled",
+                    note: "Order cancelled by admin",
+                });
+
+                order.orderStatus = "cancelled";
+
+                await order.save({ session });
+
+                updatedOrder = order;
+
+                return;
             }
 
-            order.orderStatus = status;
+            if (
+                status === "confirmed" &&
+                order.paymentMethod === "online" &&
+                order.paymentStatus !== "paid"
+            ) {
+                throw new ErrorHandler(
+                    "Online order must be paid before confirmation",
+                    400,
+                );
+            }
+
+            const allowedTransitions = {
+                pending: ["confirmed"],
+                confirmed: ["out_for_delivery"],
+                out_for_delivery: ["delivered"],
+            };
+
+            const allowedNextStatuses =
+                allowedTransitions[order.orderStatus] || [];
+
+            if (!allowedNextStatuses.includes(status)) {
+                throw new ErrorHandler(
+                    `Cannot change order status from "${order.orderStatus}" to "${status}"`,
+                    400,
+                );
+            }
 
             order.statusHistory.push({
                 status,
-                note: typeof note === "string" ? note.trim() : undefined,
+                note: `Order status changed to ${status}`,
             });
 
-            if (status === "delivered") {
-                order.deliveredAt = new Date();
-            }
+            order.orderStatus = status;
 
             await order.save({ session });
 
             updatedOrder = order;
         });
 
-        res.status(200).json({
+        return res.status(200).json({
             success: true,
             message: "Order status updated successfully",
             data: updatedOrder,

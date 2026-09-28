@@ -9,7 +9,7 @@ import {
 } from "../services/myfatoorah.service.js";
 import {
     markPaymentAsPaid,
-    releaseStockForFailedPayment,
+    releaseStockForExpiredPayment,
 } from "../services/payment.service.js";
 import { verifyMyFatoorahSignature } from "../utils/myfatoorahSignature.js";
 
@@ -30,10 +30,7 @@ export const createPayment = asyncHandler(async (req, res) => {
         throw new ErrorHandler("This order is no longer awaiting payment", 400);
     }
 
-    if (
-        order.orderStatus === "cancelled" ||
-        order.orderStatus === "delivered"
-    ) {
+    if (order.orderStatus !== "pending") {
         throw new ErrorHandler("This order can no longer be paid", 400);
     }
 
@@ -43,6 +40,10 @@ export const createPayment = asyncHandler(async (req, res) => {
 
     if (payment?.status === "paid") {
         throw new ErrorHandler("This order has already been paid", 400);
+    }
+
+    if (payment?.status === "expired") {
+        throw new ErrorHandler("This order's payment period has expired", 400);
     }
 
     if (payment?.status === "pending" && payment.paymentUrl) {
@@ -88,12 +89,6 @@ export const createPayment = asyncHandler(async (req, res) => {
         payment.paymentUrl = result.PaymentURL;
         payment.status = "pending";
 
-        if (result.PaymentId) {
-            payment.transactions.push({
-                paymentId: result.PaymentId,
-            });
-        }
-
         await payment.save();
 
         return res.status(201).json({
@@ -112,7 +107,6 @@ export const createPayment = asyncHandler(async (req, res) => {
 export const paymentCallback = asyncHandler(async (req, res) => {
     const result = paymentCallbackSchema.safeParse(req.query);
 
-    // Validate callback
     if (!result.success) {
         return res.redirect(`${process.env.CLIENT_URL}/payment/failed`);
     }
@@ -133,21 +127,25 @@ export const paymentCallback = asyncHandler(async (req, res) => {
             return res.redirect(`${process.env.CLIENT_URL}/payment/failed`);
         }
 
-        // Complete successful payment
         if (invoiceStatus === "PAID" && transaction?.Status === "SUCCESS") {
-            await markPaymentAsPaid({
+            const result = await markPaymentAsPaid({
                 paymentId: payment._id,
                 transaction,
             });
 
+            if (result === "paid") {
+                return res.redirect(
+                    `${process.env.CLIENT_URL}/payment/success?orderId=${payment.order}`,
+                );
+            }
+
             return res.redirect(
-                `${process.env.CLIENT_URL}/payment/success?orderId=${payment.order}`,
+                `${process.env.CLIENT_URL}/payment/failed?orderId=${payment.order}`,
             );
         }
 
-        // Release stock after invoice expiry
         if (invoiceStatus === "EXPIRED" && payment.status === "pending") {
-            await releaseStockForFailedPayment({
+            await releaseStockForExpiredPayment({
                 paymentId: payment._id,
                 reason: "Invoice expired",
             });
@@ -202,26 +200,30 @@ export const myFatoorahWebhook = asyncHandler(async (req, res) => {
     payment.lastWebhookAt = new Date();
     payment.lastWebhookReference = event.Event?.Reference;
 
-    // Complete successful payment
-    if (invoice.Status === "PAID" && transaction?.Status === "SUCCESS") {
-        await payment.save();
+    await payment.save();
 
-        await markPaymentAsPaid({
-            paymentId: payment._id,
-            transaction,
+    if (!transaction?.PaymentId) {
+        return res.status(400).json({
+            success: false,
+            message: "Payment ID missing",
         });
     }
 
-    // Release stock after invoice expiry
-    else if (invoice.Status === "EXPIRED" && payment.status === "pending") {
-        await payment.save();
+    const paymentResult = await getMyFatoorahPayment(transaction.PaymentId);
 
-        await releaseStockForFailedPayment({
+    const invoiceStatus = paymentResult?.Invoice?.Status;
+    const latestTransaction = paymentResult?.Transaction;
+
+    if (invoiceStatus === "PAID" && latestTransaction?.Status === "SUCCESS") {
+        await markPaymentAsPaid({
+            paymentId: payment._id,
+            transaction: latestTransaction,
+        });
+    } else if (invoiceStatus === "EXPIRED" && payment.status === "pending") {
+        await releaseStockForExpiredPayment({
             paymentId: payment._id,
             reason: "Invoice expired",
         });
-    } else {
-        await payment.save();
     }
 
     return res.status(200).json({
