@@ -1,3 +1,4 @@
+import { zodResolver } from "@hookform/resolvers/zod";
 import {
     ArrowLeft,
     ArrowUpRight,
@@ -7,13 +8,56 @@ import {
     Mail,
 } from "lucide-react";
 import { useState } from "react";
-import { Link } from "react-router";
+import { useForm } from "react-hook-form";
+import { Link, useNavigate } from "react-router";
+import { z } from "zod";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import useAuth from "@/hooks/useAuth";
+import usePost from "@/hooks/usePost";
+
+const loginSchema = z.object({
+    email: z.string().trim().email("Please enter a valid email address."),
+
+    password: z.string().min(8, "Password must be at least 8 characters long."),
+});
 
 const Login = () => {
     const [showPassword, setShowPassword] = useState(false);
+
+    const navigate = useNavigate();
+    const { refreshUser } = useAuth();
+
+    const {
+        register,
+        handleSubmit,
+        formState: { errors },
+    } = useForm({
+        resolver: zodResolver(loginSchema),
+        defaultValues: {
+            email: "",
+            password: "",
+        },
+    });
+
+    const {
+        mutate: loginUser,
+        isPending: isLoggingIn,
+        error: loginError,
+    } = usePost({
+        url: "/auth/login",
+    });
+
+    const handleLogin = (formData) => {
+        loginUser(formData, {
+            onSuccess: async () => {
+                await refreshUser();
+
+                navigate("/");
+            },
+        });
+    };
 
     return (
         <main className="min-h-screen bg-background">
@@ -58,7 +102,11 @@ const Login = () => {
                         </div>
 
                         {/* Form */}
-                        <form className="space-y-5">
+                        <form
+                            className="space-y-5"
+                            onSubmit={handleSubmit(handleLogin)}
+                            noValidate
+                        >
                             {/* Email */}
                             <div className="space-y-2">
                                 <label
@@ -73,12 +121,20 @@ const Login = () => {
 
                                     <Input
                                         id="email"
-                                        name="email"
                                         type="email"
                                         placeholder="Enter your email"
+                                        autoComplete="email"
+                                        disabled={isLoggingIn}
                                         className="h-11 pl-10"
+                                        {...register("email")}
                                     />
                                 </div>
+
+                                {errors.email && (
+                                    <p className="text-sm text-destructive">
+                                        {errors.email.message}
+                                    </p>
+                                )}
                             </div>
 
                             {/* Password */}
@@ -104,20 +160,23 @@ const Login = () => {
 
                                     <Input
                                         id="password"
-                                        name="password"
                                         type={
                                             showPassword ? "text" : "password"
                                         }
                                         placeholder="Enter your password"
+                                        autoComplete="current-password"
+                                        disabled={isLoggingIn}
                                         className="h-11 px-10"
+                                        {...register("password")}
                                     />
 
                                     <button
                                         type="button"
+                                        disabled={isLoggingIn}
                                         onClick={() =>
                                             setShowPassword((prev) => !prev)
                                         }
-                                        className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground transition-colors hover:text-foreground"
+                                        className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground transition-colors hover:text-foreground disabled:pointer-events-none disabled:opacity-50"
                                         aria-label={
                                             showPassword
                                                 ? "Hide password"
@@ -131,19 +190,37 @@ const Login = () => {
                                         )}
                                     </button>
                                 </div>
+
+                                {errors.password && (
+                                    <p className="text-sm text-destructive">
+                                        {errors.password.message}
+                                    </p>
+                                )}
                             </div>
+
+                            {/* API Error */}
+                            {loginError && (
+                                <p className="text-sm text-destructive">
+                                    {loginError?.response?.data?.message ||
+                                        "Unable to sign in. Please check your email and password."}
+                                </p>
+                            )}
 
                             {/* Login */}
                             <Button
                                 type="submit"
                                 variant="asymmetric"
                                 size="lg"
+                                disabled={isLoggingIn}
                                 className="group/button h-auto w-full gap-2 px-6 py-2 text-sm font-semibold"
                             >
-                                Sign in
-                                <span className="flex size-6 shrink-0 items-center justify-center rounded-full bg-primary-foreground text-primary transition-transform duration-300 group-hover/button:rotate-45">
-                                    <ArrowUpRight className="size-3.5" />
-                                </span>
+                                {isLoggingIn ? "Signing in..." : "Sign in"}
+
+                                {!isLoggingIn && (
+                                    <span className="flex size-6 shrink-0 items-center justify-center rounded-full bg-primary-foreground text-primary transition-transform duration-300 group-hover/button:rotate-45">
+                                        <ArrowUpRight className="size-3.5" />
+                                    </span>
+                                )}
                             </Button>
                         </form>
 
@@ -168,7 +245,6 @@ const Login = () => {
                         className="absolute inset-0 h-full w-full object-cover"
                     />
 
-                    {/* Image Overlay */}
                     <div className="absolute inset-0 bg-black/10" />
 
                     {/* Back to Home */}
@@ -181,6 +257,7 @@ const Login = () => {
                         >
                             <Link to="/" className="flex items-center gap-2">
                                 Home
+
                                 <span className="flex size-6 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground transition-transform duration-300 group-hover/button:-rotate-45">
                                     <ArrowLeft className="size-3.5" />
                                 </span>
