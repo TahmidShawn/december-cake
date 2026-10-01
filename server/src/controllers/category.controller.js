@@ -1,4 +1,3 @@
-
 import Category from "../models/category.model.js";
 import ErrorHandler from "../utils/errorHandler.js";
 import asyncHandler from "../utils/asyncHandler.js";
@@ -17,6 +16,7 @@ export const createCategory = asyncHandler(async (req, res) => {
     const existing = await Category.findOne({
         $or: [{ "name.en": nameEn }, { "name.ar": nameAr }],
     });
+
     if (existing) {
         throw new ErrorHandler("Category with this name already exists", 409);
     }
@@ -28,6 +28,7 @@ export const createCategory = asyncHandler(async (req, res) => {
     );
 
     let category;
+
     try {
         category = await Category.create({
             name,
@@ -48,9 +49,53 @@ export const createCategory = asyncHandler(async (req, res) => {
 });
 
 export const getCategories = asyncHandler(async (req, res) => {
-    const categories = await Category.find({ isActive: true }).sort({
-        createdAt: -1,
-    });
+    const categories = await Category.aggregate([
+        {
+            $match: {
+                isActive: true,
+            },
+        },
+        {
+            $lookup: {
+                from: "cakes",
+                localField: "_id",
+                foreignField: "category",
+                pipeline: [
+                    {
+                        $match: {
+                            isActive: true,
+                        },
+                    },
+                    {
+                        $count: "count",
+                    },
+                ],
+                as: "cakeCount",
+            },
+        },
+        {
+            $addFields: {
+                cakeCount: {
+                    $ifNull: [
+                        {
+                            $arrayElemAt: ["$cakeCount.count", 0],
+                        },
+                        0,
+                    ],
+                },
+            },
+        },
+        {
+            $project: {
+                imageFileId: 0,
+            },
+        },
+        {
+            $sort: {
+                createdAt: -1,
+            },
+        },
+    ]);
 
     res.status(200).json({
         success: true,
@@ -63,6 +108,7 @@ export const getCategory = asyncHandler(async (req, res) => {
     const { id } = req.params;
 
     const category = await Category.findById(id);
+
     if (!category) {
         throw new ErrorHandler("Category not found", 404);
     }
@@ -80,11 +126,13 @@ export const updateCategory = asyncHandler(async (req, res) => {
     const file = req.file;
 
     const category = await Category.findById(id);
+
     if (!category) {
         throw new ErrorHandler("Category not found", 404);
     }
 
     const updateData = {};
+
     if (nameEn || nameAr) {
         if (nameEn) updateData["name.en"] = nameEn;
         if (nameAr) updateData["name.ar"] = nameAr;
@@ -96,6 +144,7 @@ export const updateCategory = asyncHandler(async (req, res) => {
                 ...(nameAr ? [{ "name.ar": nameAr }] : []),
             ],
         });
+
         if (duplicate) {
             throw new ErrorHandler(
                 "Category with this name already exists",
@@ -109,7 +158,7 @@ export const updateCategory = asyncHandler(async (req, res) => {
     }
 
     let newFileId = null;
-    let oldFileId = category.imageFileId;
+    const oldFileId = category.imageFileId;
 
     if (file) {
         const { url, fileId } = await uploadFile(
@@ -117,6 +166,7 @@ export const updateCategory = asyncHandler(async (req, res) => {
             file.originalname,
             "categories",
         );
+
         updateData.imageUrl = url;
         updateData.imageFileId = fileId;
         newFileId = fileId;
@@ -145,6 +195,7 @@ export const updateCategory = asyncHandler(async (req, res) => {
         if (newFileId) {
             await deleteFile(newFileId);
         }
+
         throw error;
     }
 });
@@ -153,6 +204,7 @@ export const deleteCategory = asyncHandler(async (req, res) => {
     const { id } = req.params;
 
     const category = await Category.findById(id);
+
     if (!category) {
         throw new ErrorHandler("Category not found", 404);
     }
@@ -168,4 +220,3 @@ export const deleteCategory = asyncHandler(async (req, res) => {
         message: "Category deleted successfully",
     });
 });
-
