@@ -2,15 +2,23 @@ import express from "express";
 import cors from "cors";
 import helmet from "helmet";
 import pinoHttp from "pino-http";
-import rateLimit from "express-rate-limit";
+
 import cookieParser from "cookie-parser";
 import ErrorHandler from "./utils/errorHandler.js";
 import errorMiddleware from "./middlewares/error.middleware.js";
 import logger from "./utils/logger.js";
 import validateEnv from "./config/validateEnv.js";
+import { globalLimiter } from "./middlewares/rateLimiter.middleware.js";
 
 // import routes
-// import userRouter from "./routes/user.route.js";
+import authRouter from "./routes/auth.route.js";
+import userRouter from "./routes/user.route.js";
+import categoryRouter from "./routes/category.route.js";
+import cakeRouter from "./routes/cake.route.js";
+import cartRouter from "./routes/cart.route.js";
+import orderRouter from "./routes/order.route.js";
+import paymentRouter from "./routes/payment.route.js";
+import addOnRouter from "./routes/addOn.route.js";
 
 // env check
 
@@ -20,7 +28,25 @@ const app = express();
 app.set("trust proxy", 1);
 
 app.use(helmet());
-app.use(pinoHttp({ logger }));
+
+app.use(
+    pinoHttp({
+        logger,
+        serializers: {
+            req(req) {
+                return { method: req.method, url: req.url };
+            },
+            res(res) {
+                return { statusCode: res.statusCode };
+            },
+        },
+        customSuccessMessage: (req, res, responseTime) =>
+            `${req.method} ${req.url} ${res.statusCode} - ${responseTime}ms`,
+        autoLogging: {
+            ignore: (req) => req.url === "/health",
+        },
+    }),
+);
 
 app.use(
     cors({
@@ -32,15 +58,7 @@ app.use(
 );
 
 // global rate limit
-app.use(
-    rateLimit({
-        windowMs: 15 * 60 * 1000,
-        limit: 100,
-        standardHeaders: true,
-        legacyHeaders: false,
-        message: "Too many requests, please try again later.",
-    }),
-);
+app.use(globalLimiter);
 
 app.use(express.json({ limit: "16kb" }));
 app.use(express.urlencoded({ extended: true, limit: "16kb" }));
@@ -52,7 +70,16 @@ app.get("/healthz", (req, res) => {
     res.status(200).json({ status: "ok" });
 });
 
-// app.use("/api/v1", userRouter);
+// router
+
+app.use("/api/v1", authRouter);
+app.use("/api/v1", userRouter);
+app.use("/api/v1", categoryRouter);
+app.use("/api/v1", cakeRouter);
+app.use("/api/v1", cartRouter);
+app.use("/api/v1", orderRouter);
+app.use("/api/v1", paymentRouter);
+app.use("/api/v1", addOnRouter);
 
 app.use((req, res, next) => {
     next(new ErrorHandler(`Cannot ${req.method} ${req.originalUrl}`, 404));

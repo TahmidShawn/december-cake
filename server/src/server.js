@@ -3,6 +3,7 @@ import mongoose from "mongoose";
 import app from "./app.js";
 import connectDB from "./config/db.js";
 import logger from "./utils/logger.js";
+import { scheduleOrderExpiryJob } from "./jobs/orderExpiry.job.js";
 
 const port = process.env.PORT || 5000;
 let server;
@@ -53,6 +54,7 @@ process.on("SIGINT", () => gracefulShutdown("SIGINT"));
 connectDB()
     .then(() => {
         startServer();
+        scheduleOrderExpiryJob();
     })
     .catch((err) => {
         logger.fatal({ err }, "Failed to connect with the database");

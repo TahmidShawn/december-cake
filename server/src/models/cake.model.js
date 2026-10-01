@@ -1,6 +1,5 @@
 import mongoose from "mongoose";
 import generateSlug from "../utils/generateSlug.js";
-
 const cakeSchema = new mongoose.Schema(
     {
         name: {
@@ -19,12 +18,7 @@ const cakeSchema = new mongoose.Schema(
                 maxLength: [150, "Product name cannot exceed 150 characters"],
             },
         },
-        slug: {
-            type: String,
-            unique: true,
-            lowercase: true,
-            trim: true,
-        },
+        slug: { type: String, unique: true, lowercase: true, trim: true },
         description: {
             en: {
                 type: String,
@@ -39,7 +33,6 @@ const cakeSchema = new mongoose.Schema(
                 maxLength: [1000, "Description cannot exceed 1000 characters"],
             },
         },
-
         images: {
             type: [
                 {
@@ -60,21 +53,41 @@ const cakeSchema = new mongoose.Schema(
             required: [true, "Please select a category"],
             index: true,
         },
-        weightInLbs: {
-            type: Number,
-            required: [true, "Please enter the cake weight in pounds"],
-            min: [1, "Weight must be at least 1 lbs"],
+        flavor: {
+            type: String,
+            required: [true, "Please select a cake flavor"],
+            enum: [
+                "chocolate",
+                "vanilla",
+                "red-velvet",
+                "strawberry",
+                "carrot",
+                "butterscotch",
+                "black-forest",
+                "lemon",
+                "mango",
+                "pistachio",
+            ],
         },
-        servings: {
-            type: Number,
-            min: 0,
-            default: 0,
-            help: "Approximate number of people this cake serves",
+        weightSize: {
+            type: String,
+            required: [true, "Please select the cake size"],
+            enum: {
+                values: ["small", "medium"],
+                message: "Size must be either small or medium",
+            },
         },
-        priceInFils: {
+        price: {
             type: Number,
             required: [true, "Please enter product price"],
             min: [0, "Price cannot be negative"],
+            validate: {
+                validator: (value) =>
+                    Number.isFinite(value) &&
+                    Number(value.toFixed(3)) === value,
+                message:
+                    "Price must be a valid KWD amount with up to 3 decimal places",
+            },
         },
         discountPercentage: {
             type: Number,
@@ -88,6 +101,7 @@ const cakeSchema = new mongoose.Schema(
             min: [0, "Stock cannot be negative"],
             default: 0,
         },
+        isCustomAvailable: { type: Boolean, default: false },
         isFeatured: { type: Boolean, default: false },
         isActive: { type: Boolean, default: true },
         avgRating: { type: Number, default: 0, min: 0, max: 5 },
@@ -102,32 +116,43 @@ const cakeSchema = new mongoose.Schema(
             virtuals: true,
             transform: (doc, ret) => {
                 delete ret.__v;
+                delete ret.id;
+
+                ret.price = ret.price.toFixed(3);
+
+                if (ret.discountedPrice !== undefined) {
+                    ret.discountedPrice = ret.discountedPrice.toFixed(3);
+                }
+
                 return ret;
             },
         },
+        toObject: { virtuals: true },
     },
 );
 
-// generate slug from the english name
 cakeSchema.pre("validate", function generateCakeSlug() {
     if (this.name?.en && (!this.slug || this.isModified("name.en"))) {
         this.slug = generateSlug(this.name.en);
     }
 });
 
-// discounted price
-cakeSchema.virtual("discountedPriceInFils").get(function () {
-    if (!this.discountPercentage) return this.priceInFils;
-    return Math.round(
-        this.priceInFils - (this.priceInFils * this.discountPercentage) / 100,
+cakeSchema.virtual("discountedPrice").get(function () {
+    if (!this.discountPercentage) {
+        return Number(this.price.toFixed(3));
+    }
+    return Number(
+        (this.price - (this.price * this.discountPercentage) / 100).toFixed(3),
     );
 });
 
-cakeSchema.virtual("estimatedServings").get(function () {
-    if (!this.weightInLbs) return 0;
-    const BASE = 4;
-    return Math.round(this.weightInLbs * BASE);
+cakeSchema.virtual("servings").get(function () {
+    if (this.weightSize === "small") return "3-4";
+    if (this.weightSize === "medium") return "8-12";
+    return null;
 });
+
+cakeSchema.index({ "name.en": "text", "name.ar": "text" });
 
 const Cake = mongoose.models.Cake || mongoose.model("Cake", cakeSchema);
 export default Cake;

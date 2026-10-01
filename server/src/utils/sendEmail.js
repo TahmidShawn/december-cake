@@ -1,36 +1,28 @@
-import nodemailer from "nodemailer";
+import { Resend } from "resend";
 import logger from "./logger.js";
 
-let transporter;
+let resendClient;
 
-const getTransporter = () => {
-    if (!transporter) {
-        transporter = nodemailer.createTransport({
-            host: process.env.SMTP_HOST,
-            port: Number(process.env.SMTP_PORT),
-            secure: Number(process.env.SMTP_PORT) === 465,
-            auth: {
-                user: process.env.SMTP_MAIL,
-                pass: process.env.SMTP_PASSWORD,
-            },
-            connectionTimeout: 10000,
-            socketTimeout: 10000,
-        });
+const getClient = () => {
+    if (!resendClient) {
+        resendClient = new Resend(process.env.RESEND_API_KEY);
     }
-    return transporter;
+    return resendClient;
 };
 
 const sendEmail = async (options) => {
-    const mailOptions = {
-        from: `"Cake Shop" <${process.env.SMTP_MAIL}>`,
-        to: options.email,
-        subject: options.subject,
-        text: options.message,
-        html: options.html,
-    };
-
     try {
-        await getTransporter().sendMail(mailOptions);
+        const { error } = await getClient().emails.send({
+            from: process.env.EMAIL_FROM,
+            to: options.email,
+            subject: options.subject,
+            text: options.message,
+            html: options.html,
+        });
+
+        if (error) {
+            throw new Error(error.message || "Resend API returned an error");
+        }
     } catch (error) {
         logger.error({ err: error, to: options.email }, "Failed to send email");
         throw error;

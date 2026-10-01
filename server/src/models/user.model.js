@@ -2,7 +2,6 @@ import mongoose from "mongoose";
 import jwt from "jsonwebtoken";
 import bcrypt from "bcrypt";
 import crypto from "crypto";
-import addressSchema from "./address.model.js";
 
 const userSchema = new mongoose.Schema(
     {
@@ -25,7 +24,10 @@ const userSchema = new mongoose.Schema(
         phone: {
             type: String,
             trim: true,
-            match: [/^(\+965)?[569]\d{7}$/, "Please enter a valid Kuwait phone number"],
+            match: [
+                /^(\+965)?[569]\d{7}$/,
+                "Please enter a valid Kuwait phone number",
+            ],
         },
         password: {
             type: String,
@@ -37,12 +39,12 @@ const userSchema = new mongoose.Schema(
         role: {
             type: String,
             enum: ["user", "admin"],
-            default: "user",
+            default: "admin",
         },
 
         isVerified: { type: Boolean, default: false },
-        verifyToken: { type: String, select: false },
-        verifyTokenExpiry: { type: Date, select: false },
+        verifyCode: { type: String, select: false },
+        verifyCodeExpiry: { type: Date, select: false },
 
         resetPasswordToken: { type: String, select: false },
         resetPasswordExpire: { type: Date, select: false },
@@ -50,7 +52,6 @@ const userSchema = new mongoose.Schema(
         refreshToken: { type: String, select: false },
 
         preferredLanguage: { type: String, enum: ["en", "ar"], default: "en" },
-        addresses: [addressSchema],
     },
     { timestamps: true },
 );
@@ -60,8 +61,8 @@ userSchema.set("toJSON", {
         delete ret.password;
         delete ret.resetPasswordToken;
         delete ret.resetPasswordExpire;
-        delete ret.verifyToken;
-        delete ret.verifyTokenExpiry;
+        delete ret.verifyCode;
+        delete ret.verifyCodeExpiry;
         delete ret.refreshToken;
         delete ret.__v;
         return ret;
@@ -92,9 +93,22 @@ userSchema.methods.comparePassword = async function comparePassword(password) {
 
 userSchema.methods.getResetPasswordToken = function getResetPasswordToken() {
     const resetToken = crypto.randomBytes(20).toString("hex");
-    this.resetPasswordToken = crypto.createHash("sha256").update(resetToken).digest("hex");
+    this.resetPasswordToken = crypto
+        .createHash("sha256")
+        .update(resetToken)
+        .digest("hex");
     this.resetPasswordExpire = Date.now() + 15 * 60 * 1000;
     return resetToken;
+};
+
+userSchema.methods.getVerificationCode = function getVerificationCode() {
+    const plainCode = Math.floor(100000 + Math.random() * 900000).toString();
+    this.verifyCode = crypto
+        .createHash("sha256")
+        .update(plainCode)
+        .digest("hex");
+    this.verifyCodeExpiry = Date.now() + 10 * 60 * 1000; // 10 minute
+    return plainCode;
 };
 
 const User = mongoose.models.User || mongoose.model("User", userSchema);
