@@ -1,17 +1,21 @@
 import crypto from "crypto";
 import jwt from "jsonwebtoken";
+import { OAuth2Client } from "google-auth-library";
+
 import ErrorHandler from "../utils/errorHandler.js";
 import asyncHandler from "../utils/asyncHandler.js";
 import User from "../models/user.model.js";
-import sendToken from "../utils/sendToken.js";
+import sendToken, { cookieOptions } from "../utils/sendToken.js";
 import sendEmail from "../utils/sendEmail.js";
-import { cookieOptions } from "../utils/sendToken.js";
+
+const googleClient = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
 
 const clearAuthCookies = (res) => {
     const clearOpts = {
         ...cookieOptions(0),
         expires: new Date(0),
     };
+
     res.cookie("token", null, clearOpts);
     res.cookie("refreshToken", null, clearOpts);
 };
@@ -31,8 +35,10 @@ export const registerUser = asyncHandler(async (req, res) => {
 
         existingUser.username = username;
         existingUser.password = password;
+        existingUser.authProvider = "local";
 
         const plainCode = existingUser.getVerificationCode();
+
         await existingUser.save({ validateBeforeSave: false });
 
         const message = `
@@ -62,8 +68,15 @@ export const registerUser = asyncHandler(async (req, res) => {
         });
     }
 
-    const user = await User.create({ username, email, password });
+    const user = await User.create({
+        username,
+        email,
+        password,
+        authProvider: "local",
+    });
+
     const plainCode = user.getVerificationCode();
+
     await user.save({ validateBeforeSave: false });
 
     const message = `
@@ -90,7 +103,9 @@ export const registerUser = asyncHandler(async (req, res) => {
     res.status(201).json({
         success: true,
         message: `A verification code has been sent to ${user.email}.`,
-        ...(process.env.NODE_ENV === "development" && { devCode: plainCode }),
+        ...(process.env.NODE_ENV === "development" && {
+            devCode: plainCode,
+        }),
     });
 });
 
@@ -119,6 +134,7 @@ export const verifyEmail = asyncHandler(async (req, res) => {
     user.isVerified = true;
     user.verifyCode = undefined;
     user.verifyCodeExpiry = undefined;
+
     await user.save({ validateBeforeSave: false });
 
     await sendToken(
@@ -133,6 +149,7 @@ export const resendVerification = asyncHandler(async (req, res) => {
     const { email } = req.body;
 
     const user = await User.findOne({ email });
+
     if (!user || user.isVerified) {
         return res.status(200).json({
             success: true,
@@ -142,6 +159,7 @@ export const resendVerification = asyncHandler(async (req, res) => {
     }
 
     const plainCode = user.getVerificationCode();
+
     await user.save({ validateBeforeSave: false });
 
     const message = `
@@ -163,7 +181,7 @@ export const resendVerification = asyncHandler(async (req, res) => {
             message,
         });
     } catch (error) {
-        // ignore
+        // Intentionally ignore email errors here.
     }
 
     res.status(200).json({
@@ -177,7 +195,23 @@ export const loginUser = asyncHandler(async (req, res) => {
     const { email, password } = req.body;
 
     const user = await User.findOne({ email }).select("+password");
-    if (!user || !(await user.comparePassword(password))) {
+
+    if (!user) {
+        throw new ErrorHandler("Invalid email or password", 401);
+    }
+
+    /*
+     * Google users do not have a local password.
+     * They must use Google login instead.
+     */
+    if (user.authProvider === "google") {
+        throw new ErrorHandler(
+            "This account uses Google login. Please continue with Google.",
+            401,
+        );
+    }
+
+    if (!password || !(await user.comparePassword(password))) {
         throw new ErrorHandler("Invalid email or password", 401);
     }
 
@@ -191,6 +225,130 @@ export const loginUser = asyncHandler(async (req, res) => {
     await sendToken(user, 200, res, "Login successful");
 });
 
+export const googleLogin = asyncHandler(async (req, res) => {
+    const { credential } = req.body;
+
+    if (!credential) {
+        throw new ErrorHandler("Google credential is required", 400);
+    }
+
+    let ticket;
+
+    try {
+        ticket = await googleClient.verifyIdToken({
+            idToken: credential,
+            audience: process.env.GOOGLE_CLIENT_ID,
+        });
+    } catch (error) {
+        throw new ErrorHandler("Invalid or expired Google credential", 401);
+    }
+
+    const payload = ticket.getPayload();
+
+    if (!payload) {
+        throw new ErrorHandler("Invalid Google account information", 401);
+    }
+
+    const {
+        sub: googleId,
+        email,
+        email_verified: emailVerified,
+        name,
+        picture,
+    } = payload;
+
+    if (!email || !emailVerified || !googleId) {
+        throw new ErrorHandler("Unable to verify your Google account", 401);
+    }
+
+    /*
+     * First try to find the user by Google ID.
+     *
+     * This is the safest way to identify an existing Google account.
+     */
+    let user = await User.findOne({
+        googleId,
+    }).select("+refreshToken");
+
+    if (user) {
+        /*
+         * Keep profile information up to date with Google.
+         */
+        if (picture && user.avatarUrl !== picture) {
+            user.avatarUrl = picture;
+        }
+
+        if (name && user.username !== name) {
+            user.username = name;
+        }
+
+        user.isVerified = true;
+
+        await user.save({ validateBeforeSave: false });
+
+        return sendToken(user, 200, res, "Google login successful");
+    }
+
+    /*
+     * The Google ID was not found.
+     *
+     * Check whether the email already belongs to a local account.
+     */
+    user = await User.findOne({ email }).select("+refreshToken");
+
+    if (user) {
+        /*
+         * Do not silently convert an existing local account
+         * into a Google account.
+         *
+         * The user should log in with their existing password.
+         */
+        if (user.authProvider === "local") {
+            throw new ErrorHandler(
+                "An account with this email already exists. Please log in with your email and password.",
+                409,
+            );
+        }
+
+        /*
+         * This handles an existing account that may have been
+         * created as a Google account but does not yet have
+         * googleId stored.
+         */
+        user.googleId = googleId;
+        user.authProvider = "google";
+        user.isVerified = true;
+
+        if (name) {
+            user.username = name;
+        }
+
+        if (picture) {
+            user.avatarUrl = picture;
+        }
+
+        await user.save({ validateBeforeSave: false });
+
+        return sendToken(user, 200, res, "Google login successful");
+    }
+
+    /*
+     * No existing account.
+     *
+     * Create a new Google user without a password.
+     */
+    user = await User.create({
+        username: name || email.split("@")[0],
+        email,
+        googleId,
+        avatarUrl: picture || undefined,
+        authProvider: "google",
+        isVerified: true,
+    });
+
+    await sendToken(user, 201, res, "Google account created successfully");
+});
+
 export const refreshAccessToken = asyncHandler(async (req, res) => {
     const incomingRefreshToken = req.cookies?.refreshToken;
 
@@ -202,6 +360,7 @@ export const refreshAccessToken = asyncHandler(async (req, res) => {
     }
 
     let decoded;
+
     try {
         decoded = jwt.verify(
             incomingRefreshToken,
@@ -227,8 +386,12 @@ export const refreshAccessToken = asyncHandler(async (req, res) => {
 });
 
 export const logout = asyncHandler(async (req, res) => {
-    await User.findByIdAndUpdate(req.user._id, { $unset: { refreshToken: 1 } });
+    await User.findByIdAndUpdate(req.user._id, {
+        $unset: { refreshToken: 1 },
+    });
+
     clearAuthCookies(res);
+
     res.status(200).json({
         success: true,
         message: "Logged out successfully",
@@ -246,7 +409,19 @@ export const forgotPassword = asyncHandler(async (req, res) => {
         });
     }
 
+    /*
+     * A Google-only account has no local password to reset.
+     */
+    if (user.authProvider === "google") {
+        return res.status(200).json({
+            success: true,
+            message:
+                "This account uses Google login. Please continue with Google to sign in.",
+        });
+    }
+
     const resetToken = user.getResetPasswordToken();
+
     await user.save({ validateBeforeSave: false });
 
     const resetPasswordUrl = `${process.env.CLIENT_URL}/password/reset/${resetToken}`;
@@ -269,6 +444,7 @@ export const forgotPassword = asyncHandler(async (req, res) => {
             subject: "Password Reset Request - Action Required",
             message,
         });
+
         res.status(200).json({
             success: true,
             message: `An email with password reset instructions has been sent to ${user.email}.`,
@@ -276,7 +452,9 @@ export const forgotPassword = asyncHandler(async (req, res) => {
     } catch (error) {
         user.resetPasswordToken = undefined;
         user.resetPasswordExpire = undefined;
+
         await user.save({ validateBeforeSave: false });
+
         throw new ErrorHandler(
             "Failed to send password reset email. Please try again later.",
             500,
@@ -302,9 +480,20 @@ export const resetPassword = asyncHandler(async (req, res) => {
         );
     }
 
+    /*
+     * Only local accounts can reset a local password.
+     */
+    if (user.authProvider === "google") {
+        throw new ErrorHandler(
+            "This account uses Google login and does not have a local password.",
+            400,
+        );
+    }
+
     user.password = req.body.password;
     user.resetPasswordToken = undefined;
     user.resetPasswordExpire = undefined;
+
     await user.save();
 
     await sendToken(

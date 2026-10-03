@@ -2,6 +2,7 @@ import { Router } from "express";
 import {
     registerUser,
     loginUser,
+    googleLogin,
     logout,
     verifyEmail,
     resendVerification,
@@ -31,6 +32,9 @@ router
 router
     .route("/auth/login")
     .post(authLimiter, validateRequest(loginSchema), loginUser);
+
+// Google Login
+router.route("/auth/google").post(googleLogin);
 
 // Refresh access token
 router.route("/auth/refresh-token").post(authLimiter, refreshAccessToken);
