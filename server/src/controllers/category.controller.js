@@ -104,6 +104,57 @@ export const getCategories = asyncHandler(async (req, res) => {
     });
 });
 
+export const getAdminCategories = asyncHandler(async (req, res) => {
+    const categories = await Category.aggregate([
+        {
+            $lookup: {
+                from: "cakes",
+                localField: "_id",
+                foreignField: "category",
+                pipeline: [
+                    {
+                        $match: {
+                            isActive: true,
+                        },
+                    },
+                    {
+                        $count: "count",
+                    },
+                ],
+                as: "cakeCount",
+            },
+        },
+        {
+            $addFields: {
+                cakeCount: {
+                    $ifNull: [
+                        {
+                            $arrayElemAt: ["$cakeCount.count", 0],
+                        },
+                        0,
+                    ],
+                },
+            },
+        },
+        {
+            $project: {
+                imageFileId: 0,
+            },
+        },
+        {
+            $sort: {
+                createdAt: -1,
+            },
+        },
+    ]);
+
+    res.status(200).json({
+        success: true,
+        message: "Categories fetched successfully",
+        data: categories,
+    });
+});
+
 export const getCategory = asyncHandler(async (req, res) => {
     const { id } = req.params;
 

@@ -2,6 +2,7 @@ import { Router } from "express";
 import {
     createCategory,
     getCategories,
+    getAdminCategories,
     getCategory,
     updateCategory,
     deleteCategory,
@@ -28,6 +29,14 @@ router
         upload.single("image"),
         validateRequest(createCategorySchema),
         createCategory,
+    );
+
+router
+    .route("/categories/admin")
+    .get(
+        isAuthenticatedUser,
+        authorizeRoles("admin"),
+        getAdminCategories,
     );
 
 router
