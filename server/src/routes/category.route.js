@@ -1,4 +1,5 @@
 import { Router } from "express";
+
 import {
     createCategory,
     getCategories,
@@ -7,22 +8,37 @@ import {
     updateCategory,
     deleteCategory,
 } from "../controllers/category.controller.js";
+
 import {
     isAuthenticatedUser,
     authorizeRoles,
 } from "../middlewares/auth.middleware.js";
+
 import { validateRequest } from "../middlewares/validation.middleware.js";
+
 import {
     createCategorySchema,
     updateCategorySchema,
 } from "../validations/category.validation.js";
+
 import upload from "../middlewares/multer.middleware.js";
 
 const router = Router();
 
+// Public categories
+router.route("/categories").get(getCategories);
+
+// Public single category
+router.route("/categories/:id").get(getCategory);
+
+// Admin category management
 router
-    .route("/categories")
-    .get(getCategories)
+    .route("/admin/categories")
+    .get(
+        isAuthenticatedUser,
+        authorizeRoles("admin"),
+        getAdminCategories,
+    )
     .post(
         isAuthenticatedUser,
         authorizeRoles("admin"),
@@ -31,17 +47,9 @@ router
         createCategory,
     );
 
+// Admin category update/delete
 router
-    .route("/categories/admin")
-    .get(
-        isAuthenticatedUser,
-        authorizeRoles("admin"),
-        getAdminCategories,
-    );
-
-router
-    .route("/categories/:id")
-    .get(getCategory)
+    .route("/admin/categories/:id")
     .put(
         isAuthenticatedUser,
         authorizeRoles("admin"),
@@ -49,6 +57,10 @@ router
         validateRequest(updateCategorySchema),
         updateCategory,
     )
-    .delete(isAuthenticatedUser, authorizeRoles("admin"), deleteCategory);
+    .delete(
+        isAuthenticatedUser,
+        authorizeRoles("admin"),
+        deleteCategory,
+    );
 
 export default router;
