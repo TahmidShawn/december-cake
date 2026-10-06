@@ -119,9 +119,95 @@ export const createCake = asyncHandler(async (req, res) => {
 });
 
 export const getCakes = asyncHandler(async (req, res) => {
-    const cakes = await Cake.find({ isActive: true })
+    const { category, price, size, sort = "featured" } = req.query;
+
+    const filter = {
+        isActive: true,
+    };
+
+    // Category filter
+    if (category) {
+        const existingCategory = await Category.findOne({
+            slug: category,
+            isActive: true,
+        }).select("_id");
+
+        if (!existingCategory) {
+            throw new ErrorHandler("Category not found", 404);
+        }
+
+        filter.category = existingCategory._id;
+    }
+
+    // Price filter
+    if (price) {
+        const [min, max] = price.split("-").map(Number);
+
+        if (
+            Number.isNaN(min) ||
+            Number.isNaN(max) ||
+            min < 0 ||
+            max < min
+        ) {
+            throw new ErrorHandler("Invalid price range", 400);
+        }
+
+        filter.discountedPrice = {
+            $gte: min,
+            $lte: max,
+        };
+    }
+
+    // Size filter
+    if (size) {
+        const sizes = size
+            .split(",")
+            .map((item) => item.trim())
+            .filter(Boolean);
+
+        const allowedSizes = ["small", "medium"];
+
+        const hasInvalidSize = sizes.some(
+            (item) => !allowedSizes.includes(item),
+        );
+
+        if (hasInvalidSize) {
+            throw new ErrorHandler("Invalid size", 400);
+        }
+
+        if (sizes.length > 0) {
+            filter.weightSize = {
+                $in: sizes,
+            };
+        }
+    }
+
+    // Sorting
+    let sortOption = {
+        createdAt: -1,
+    };
+
+    if (sort === "price-low") {
+        sortOption = {
+            discountedPrice: 1,
+        };
+    }
+
+    if (sort === "price-high") {
+        sortOption = {
+            discountedPrice: -1,
+        };
+    }
+
+    if (sort === "name") {
+        sortOption = {
+            "name.en": 1,
+        };
+    }
+
+    const cakes = await Cake.find(filter)
         .populate("category", "name slug")
-        .sort({ createdAt: -1 });
+        .sort(sortOption);
 
     res.status(200).json({
         success: true,
