@@ -143,12 +143,7 @@ export const getCakes = asyncHandler(async (req, res) => {
     if (price) {
         const [min, max] = price.split("-").map(Number);
 
-        if (
-            Number.isNaN(min) ||
-            Number.isNaN(max) ||
-            min < 0 ||
-            max < min
-        ) {
+        if (Number.isNaN(min) || Number.isNaN(max) || min < 0 || max < min) {
             throw new ErrorHandler("Invalid price range", 400);
         }
 
@@ -404,5 +399,89 @@ export const deleteCake = asyncHandler(async (req, res) => {
     res.status(200).json({
         success: true,
         message: "Cake deleted successfully",
+    });
+});
+
+export const getAdminCakes = asyncHandler(async (req, res) => {
+    const {
+        search,
+        category,
+        isActive,
+        isFeatured,
+        sort = "newest",
+        page = 1,
+        limit = 20,
+    } = req.query;
+
+    const filter = {};
+
+    if (search) {
+        filter.$or = [
+            { "name.en": { $regex: search, $options: "i" } },
+            { "name.ar": { $regex: search, $options: "i" } },
+        ];
+    }
+
+    if (category) {
+        const existingCategory = await Category.findOne({
+            slug: category,
+        }).select("_id");
+
+        if (!existingCategory) {
+            throw new ErrorHandler("Category not found", 404);
+        }
+
+        filter.category = existingCategory._id;
+    }
+
+    if (isActive !== undefined) {
+        filter.isActive = isActive === "true";
+    }
+
+    if (isFeatured !== undefined) {
+        filter.isFeatured = isFeatured === "true";
+    }
+
+    let sortOption = { createdAt: -1 };
+
+    if (sort === "oldest") {
+        sortOption = { createdAt: 1 };
+    }
+
+    if (sort === "price-low") {
+        sortOption = { discountedPrice: 1 };
+    }
+
+    if (sort === "price-high") {
+        sortOption = { discountedPrice: -1 };
+    }
+
+    if (sort === "name") {
+        sortOption = { "name.en": 1 };
+    }
+
+    const pageNum = Math.max(parseInt(page, 10) || 1, 1);
+    const limitNum = Math.min(Math.max(parseInt(limit, 10) || 20, 1), 100);
+    const skip = (pageNum - 1) * limitNum;
+
+    const [cakes, total] = await Promise.all([
+        Cake.find(filter)
+            .populate("category", "name slug")
+            .sort(sortOption)
+            .skip(skip)
+            .limit(limitNum),
+        Cake.countDocuments(filter),
+    ]);
+
+    res.status(200).json({
+        success: true,
+        message: "Admin cakes fetched successfully",
+        data: cakes,
+        pagination: {
+            total,
+            page: pageNum,
+            limit: limitNum,
+            pages: Math.ceil(total / limitNum),
+        },
     });
 });
