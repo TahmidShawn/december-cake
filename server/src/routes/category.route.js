@@ -1,13 +1,13 @@
 import { Router } from "express";
 
 import {
-    createCake,
-    getCakes,
-    getAdminCakes,
-    getCake,
-    updateCake,
-    deleteCake,
-} from "../controllers/cake.controller.js";
+    createCategory,
+    getCategories,
+    getAdminCategories,
+    getCategory,
+    updateCategory,
+    deleteCategory,
+} from "../controllers/category.controller.js";
 
 import {
     isAuthenticatedUser,
@@ -17,42 +17,50 @@ import {
 import { validateRequest } from "../middlewares/validation.middleware.js";
 
 import {
-    createCakeSchema,
-    updateCakeSchema,
-} from "../validations/cake.validation.js";
+    createCategorySchema,
+    updateCategorySchema,
+} from "../validations/category.validation.js";
 
 import upload from "../middlewares/multer.middleware.js";
 
 const router = Router();
 
-// Public cakes
-router.route("/cakes").get(getCakes);
+// Public categories
+router.route("/categories").get(getCategories);
 
-// Public single cake
-router.route("/cakes/:id").get(getCake);
+// Public single category
+router.route("/categories/:id").get(getCategory);
 
-// Admin cake management
+// Admin category management
 router
-    .route("/admin/cakes")
-    .get(isAuthenticatedUser, authorizeRoles("admin"), getAdminCakes)
+    .route("/admin/categories")
+    .get(
+        isAuthenticatedUser,
+        authorizeRoles("admin"),
+        getAdminCategories,
+    )
     .post(
         isAuthenticatedUser,
         authorizeRoles("admin"),
-        upload.array("images"),
-        validateRequest(createCakeSchema),
-        createCake,
+        upload.single("image"),
+        validateRequest(createCategorySchema),
+        createCategory,
     );
 
-// Admin cake update/delete
+// Admin category update/delete
 router
-    .route("/admin/cakes/:id")
+    .route("/admin/categories/:id")
     .put(
         isAuthenticatedUser,
         authorizeRoles("admin"),
-        upload.array("images"),
-        validateRequest(updateCakeSchema),
-        updateCake,
+        upload.single("image"),
+        validateRequest(updateCategorySchema),
+        updateCategory,
     )
-    .delete(isAuthenticatedUser, authorizeRoles("admin"), deleteCake);
+    .delete(
+        isAuthenticatedUser,
+        authorizeRoles("admin"),
+        deleteCategory,
+    );
 
 export default router;
