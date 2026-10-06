@@ -37,15 +37,15 @@ const optionalKwdPrice = z
 const percentageString = z
     .string()
     .optional()
+    .transform((value) => (value === undefined || value === "" ? 0 : value))
     .refine(
         (value) =>
-            value === undefined ||
-            (/^\d+(\.\d+)?$/.test(value) &&
-                Number(value) >= 0 &&
-                Number(value) <= 100),
+            /^\d+(\.\d+)?$/.test(String(value)) &&
+            Number(value) >= 0 &&
+            Number(value) <= 100,
         "Discount must be between 0 and 100",
     )
-    .transform((value) => (value === undefined ? undefined : Number(value)));
+    .transform(Number);
 
 export const createCakeSchema = z.object({
     nameEn: z
