@@ -66,7 +66,7 @@ app.use(express.static("public"));
 app.use(cookieParser());
 
 // health check
-app.get("/healthz", (req, res) => {
+app.get("/", (req, res) => {
     res.status(200).json({ status: "ok" });
 });
 
