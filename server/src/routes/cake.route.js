@@ -29,7 +29,7 @@ const router = Router();
 router.route("/cakes").get(getCakes);
 
 // Public single cake
-router.route("/cakes/:id").get(getCake);
+router.route("/cakes/:slug").get(getCake);
 
 // Admin cake management
 router

@@ -234,9 +234,12 @@ export const getCakes = asyncHandler(async (req, res) => {
 });
 
 export const getCake = asyncHandler(async (req, res) => {
-    const { id } = req.params;
+    const { slug } = req.params;
 
-    const cake = await Cake.findById(id).populate("category", "name slug");
+    const cake = await Cake.findOne({
+        slug,
+        isActive: true,
+    }).populate("category", "name slug");
 
     if (!cake) {
         throw new ErrorHandler("Cake not found", 404);
