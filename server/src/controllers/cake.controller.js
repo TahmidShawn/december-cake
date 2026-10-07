@@ -41,6 +41,26 @@ const deleteCakeImages = async (images) => {
     );
 };
 
+const parseTags = (tags) => {
+    if (!tags) return [];
+
+    if (Array.isArray(tags)) {
+        return tags
+            .flatMap((tag) => (typeof tag === "string" ? tag.split(",") : []))
+            .map((tag) => tag.trim())
+            .filter(Boolean);
+    }
+
+    if (typeof tags === "string") {
+        return tags
+            .split(",")
+            .map((tag) => tag.trim())
+            .filter(Boolean);
+    }
+
+    return [];
+};
+
 export const createCake = asyncHandler(async (req, res) => {
     const {
         nameEn,
@@ -81,6 +101,8 @@ export const createCake = asyncHandler(async (req, res) => {
 
     const images = await uploadCakeImages(files);
 
+    const parsedTags = parseTags(tags);
+
     try {
         const cake = await Cake.create({
             name: {
@@ -101,7 +123,7 @@ export const createCake = asyncHandler(async (req, res) => {
             isCustomAvailable,
             isFeatured,
             isActive,
-            tags,
+            tags: parsedTags,
             createdBy: req.user?._id,
         });
 
@@ -341,7 +363,7 @@ export const updateCake = asyncHandler(async (req, res) => {
     }
 
     if (tags !== undefined) {
-        updateData.tags = tags;
+        updateData.tags = parseTags(tags);
     }
 
     let newImages;
@@ -442,26 +464,37 @@ export const getAdminCakes = asyncHandler(async (req, res) => {
         filter.isFeatured = isFeatured === "true";
     }
 
-    let sortOption = { createdAt: -1 };
+    let sortOption = {
+        createdAt: -1,
+    };
 
     if (sort === "oldest") {
-        sortOption = { createdAt: 1 };
+        sortOption = {
+            createdAt: 1,
+        };
     }
 
     if (sort === "price-low") {
-        sortOption = { discountedPrice: 1 };
+        sortOption = {
+            discountedPrice: 1,
+        };
     }
 
     if (sort === "price-high") {
-        sortOption = { discountedPrice: -1 };
+        sortOption = {
+            discountedPrice: -1,
+        };
     }
 
     if (sort === "name") {
-        sortOption = { "name.en": 1 };
+        sortOption = {
+            "name.en": 1,
+        };
     }
 
     const pageNum = Math.max(parseInt(page, 10) || 1, 1);
     const limitNum = Math.min(Math.max(parseInt(limit, 10) || 20, 1), 100);
+
     const skip = (pageNum - 1) * limitNum;
 
     const [cakes, total] = await Promise.all([
@@ -470,6 +503,7 @@ export const getAdminCakes = asyncHandler(async (req, res) => {
             .sort(sortOption)
             .skip(skip)
             .limit(limitNum),
+
         Cake.countDocuments(filter),
     ]);
 
