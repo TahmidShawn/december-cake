@@ -61,6 +61,52 @@ const parseTags = (tags) => {
     return [];
 };
 
+/*
+ * MongoDB cannot query or sort a Mongoose virtual directly.
+ *
+ * This expression calculates the same discounted price as the
+ * Cake model's `discountedPrice` virtual.
+ */
+const discountedPriceExpression = {
+    $round: [
+        {
+            $subtract: [
+                "$price",
+                {
+                    $divide: [
+                        {
+                            $multiply: [
+                                "$price",
+                                {
+                                    $ifNull: ["$discountPercentage", 0],
+                                },
+                            ],
+                        },
+                        100,
+                    ],
+                },
+            ],
+        },
+        3,
+    ],
+};
+
+/*
+ * Format prices for aggregation results because aggregation returns
+ * plain objects and therefore does not run the Mongoose toJSON transform.
+ */
+const formatCakePrices = (cake) => {
+    if (cake.price !== undefined) {
+        cake.price = Number(cake.price).toFixed(3);
+    }
+
+    if (cake.discountedPrice !== undefined) {
+        cake.discountedPrice = Number(cake.discountedPrice).toFixed(3);
+    }
+
+    return cake;
+};
+
 export const createCake = asyncHandler(async (req, res) => {
     const {
         nameEn,
@@ -162,6 +208,8 @@ export const getCakes = asyncHandler(async (req, res) => {
     }
 
     // Price filter
+    let priceFilter;
+
     if (price) {
         const [min, max] = price.split("-").map(Number);
 
@@ -169,7 +217,7 @@ export const getCakes = asyncHandler(async (req, res) => {
             throw new ErrorHandler("Invalid price range", 400);
         }
 
-        filter.discountedPrice = {
+        priceFilter = {
             $gte: min,
             $lte: max,
         };
@@ -207,12 +255,14 @@ export const getCakes = asyncHandler(async (req, res) => {
     if (sort === "price-low") {
         sortOption = {
             discountedPrice: 1,
+            createdAt: -1,
         };
     }
 
     if (sort === "price-high") {
         sortOption = {
             discountedPrice: -1,
+            createdAt: -1,
         };
     }
 
@@ -222,14 +272,64 @@ export const getCakes = asyncHandler(async (req, res) => {
         };
     }
 
-    const cakes = await Cake.find(filter)
-        .populate("category", "name slug")
-        .sort(sortOption);
+    const pipeline = [
+        {
+            $match: filter,
+        },
+
+        {
+            $addFields: {
+                discountedPrice: discountedPriceExpression,
+            },
+        },
+    ];
+
+    if (priceFilter) {
+        pipeline.push({
+            $match: {
+                discountedPrice: priceFilter,
+            },
+        });
+    }
+
+    pipeline.push(
+        {
+            $sort: sortOption,
+        },
+
+        {
+            $lookup: {
+                from: "categories",
+                localField: "category",
+                foreignField: "_id",
+                as: "category",
+            },
+        },
+
+        {
+            $unwind: {
+                path: "$category",
+                preserveNullAndEmptyArrays: true,
+            },
+        },
+
+        {
+            $project: {
+                __v: 0,
+                "images.fileId": 0,
+                "category.__v": 0,
+            },
+        },
+    );
+
+    const cakes = await Cake.aggregate(pipeline);
+
+    const formattedCakes = cakes.map(formatCakePrices);
 
     res.status(200).json({
         success: true,
         message: "Cakes fetched successfully",
-        data: cakes,
+        data: formattedCakes,
     });
 });
 
@@ -383,13 +483,12 @@ export const updateCake = asyncHandler(async (req, res) => {
         }).populate("category", "name slug");
 
         if (!updatedCake) {
-            if (newImages) {
-                await deleteCakeImages(newImages);
-            }
-
             throw new ErrorHandler("Cake not found", 404);
         }
 
+        /*
+         * Delete the old images only after the database update succeeds.
+         */
         if (newImages) {
             await deleteCakeImages(cake.images);
         }
@@ -400,6 +499,10 @@ export const updateCake = asyncHandler(async (req, res) => {
             data: updatedCake,
         });
     } catch (error) {
+        /*
+         * New images were uploaded but the database update failed.
+         * Remove them because they are no longer referenced.
+         */
         if (newImages) {
             await deleteCakeImages(newImages);
         }
@@ -440,13 +543,25 @@ export const getAdminCakes = asyncHandler(async (req, res) => {
 
     const filter = {};
 
+    // Search
     if (search) {
         filter.$or = [
-            { "name.en": { $regex: search, $options: "i" } },
-            { "name.ar": { $regex: search, $options: "i" } },
+            {
+                "name.en": {
+                    $regex: search,
+                    $options: "i",
+                },
+            },
+            {
+                "name.ar": {
+                    $regex: search,
+                    $options: "i",
+                },
+            },
         ];
     }
 
+    // Category filter
     if (category) {
         const existingCategory = await Category.findOne({
             slug: category,
@@ -459,14 +574,22 @@ export const getAdminCakes = asyncHandler(async (req, res) => {
         filter.category = existingCategory._id;
     }
 
+    // Active filter
     if (isActive !== undefined) {
         filter.isActive = isActive === "true";
     }
 
+    // Featured filter
     if (isFeatured !== undefined) {
         filter.isFeatured = isFeatured === "true";
     }
 
+    const pageNum = Math.max(parseInt(page, 10) || 1, 1);
+    const limitNum = Math.min(Math.max(parseInt(limit, 10) || 20, 1), 100);
+
+    const skip = (pageNum - 1) * limitNum;
+
+    // Sorting
     let sortOption = {
         createdAt: -1,
     };
@@ -480,12 +603,14 @@ export const getAdminCakes = asyncHandler(async (req, res) => {
     if (sort === "price-low") {
         sortOption = {
             discountedPrice: 1,
+            createdAt: -1,
         };
     }
 
     if (sort === "price-high") {
         sortOption = {
             discountedPrice: -1,
+            createdAt: -1,
         };
     }
 
@@ -495,25 +620,77 @@ export const getAdminCakes = asyncHandler(async (req, res) => {
         };
     }
 
-    const pageNum = Math.max(parseInt(page, 10) || 1, 1);
-    const limitNum = Math.min(Math.max(parseInt(limit, 10) || 20, 1), 100);
+    const pipeline = [
+        {
+            $match: filter,
+        },
 
-    const skip = (pageNum - 1) * limitNum;
+        {
+            $addFields: {
+                discountedPrice: discountedPriceExpression,
+            },
+        },
 
-    const [cakes, total] = await Promise.all([
-        Cake.find(filter)
-            .populate("category", "name slug")
-            .sort(sortOption)
-            .skip(skip)
-            .limit(limitNum),
+        {
+            $sort: sortOption,
+        },
 
-        Cake.countDocuments(filter),
+        {
+            $skip: skip,
+        },
+
+        {
+            $limit: limitNum,
+        },
+
+        {
+            $lookup: {
+                from: "categories",
+                localField: "category",
+                foreignField: "_id",
+                as: "category",
+            },
+        },
+
+        {
+            $unwind: {
+                path: "$category",
+                preserveNullAndEmptyArrays: true,
+            },
+        },
+
+        {
+            $project: {
+                __v: 0,
+                "images.fileId": 0,
+                "category.__v": 0,
+            },
+        },
+    ];
+
+    const countPipeline = [
+        {
+            $match: filter,
+        },
+
+        {
+            $count: "total",
+        },
+    ];
+
+    const [cakes, countResult] = await Promise.all([
+        Cake.aggregate(pipeline),
+        Cake.aggregate(countPipeline),
     ]);
+
+    const total = countResult[0]?.total ?? 0;
+
+    const formattedCakes = cakes.map(formatCakePrices);
 
     res.status(200).json({
         success: true,
         message: "Admin cakes fetched successfully",
-        data: cakes,
+        data: formattedCakes,
         pagination: {
             total,
             page: pageNum,
