@@ -7,20 +7,7 @@ import ErrorHandler from "../utils/errorHandler.js";
 import asyncHandler from "../utils/asyncHandler.js";
 
 export const createOrder = asyncHandler(async (req, res) => {
-    const {
-        paymentMethod,
-        cakeIds = [],
-        addOns = [],
-        shippingAddress,
-    } = req.body;
-
-    if (!Array.isArray(cakeIds)) {
-        throw new ErrorHandler("Invalid cake selection", 400);
-    }
-
-    if (!Array.isArray(addOns)) {
-        throw new ErrorHandler("Invalid add-on selection", 400);
-    }
+    const { paymentMethod, cakeIds, addOns = [], shippingAddress } = req.body;
 
     const session = await mongoose.startSession();
 
@@ -32,140 +19,101 @@ export const createOrder = asyncHandler(async (req, res) => {
                 user: req.user._id,
             }).session(session);
 
-            if (!cart) {
+            if (!cart || !cart.items.length) {
                 throw new ErrorHandler("Your cart is empty", 400);
             }
 
-            /*
-             * A valid order can contain:
-             *
-             * - cakes only
-             * - add-ons only
-             * - cakes + add-ons
-             *
-             * It is only invalid when both selections are empty.
-             */
-            if (!cakeIds.length && !addOns.length) {
-                throw new ErrorHandler(
-                    "Please select at least one cake or add-on to place an order",
-                    400,
-                );
-            }
-
-            /*
-             * ---------------------------------------------------------
-             * CAKES
-             * ---------------------------------------------------------
-             */
-
+            // Get selected cart items
             const selectedCartItems = cart.items.filter((item) =>
                 cakeIds.includes(item.cake.toString()),
             );
 
-            /*
-             * If cake IDs were supplied, every selected cake must exist
-             * in the user's cart.
-             *
-             * For add-on-only orders cakeIds is [] and this block simply
-             * does nothing.
-             */
-            if (cakeIds.length && selectedCartItems.length !== cakeIds.length) {
+            if (!selectedCartItems.length) {
                 throw new ErrorHandler(
-                    "One or more selected cakes are not in your cart",
+                    "Please select at least one item to place an order",
+                    400,
+                );
+            }
+
+            // Check selected cakes are in cart
+            if (selectedCartItems.length !== cakeIds.length) {
+                throw new ErrorHandler(
+                    "One or more selected items are not in your cart",
                     400,
                 );
             }
 
             const selectedCakeIds = selectedCartItems.map((item) => item.cake);
 
+            // Get latest cake data
+            const cakes = await Cake.find({
+                _id: { $in: selectedCakeIds },
+                isActive: true,
+            }).session(session);
+
+            if (cakes.length !== selectedCakeIds.length) {
+                throw new ErrorHandler(
+                    "One or more selected cakes are no longer available",
+                    400,
+                );
+            }
+
+            const cakeMap = new Map(
+                cakes.map((cake) => [cake._id.toString(), cake]),
+            );
+
             const orderItems = [];
             let subtotal = 0;
 
-            /*
-             * Only query Cake documents when cakes were selected.
-             */
-            if (selectedCakeIds.length) {
-                const cakes = await Cake.find({
-                    _id: { $in: selectedCakeIds },
-                    isActive: true,
-                }).session(session);
+            for (const cartItem of selectedCartItems) {
+                const cake = cakeMap.get(cartItem.cake.toString());
 
-                if (cakes.length !== selectedCakeIds.length) {
+                if (!cake) {
                     throw new ErrorHandler(
                         "One or more selected cakes are no longer available",
                         400,
                     );
                 }
 
-                const cakeMap = new Map(
-                    cakes.map((cake) => [cake._id.toString(), cake]),
-                );
-
-                for (const cartItem of selectedCartItems) {
-                    const cake = cakeMap.get(cartItem.cake.toString());
-
-                    if (!cake) {
-                        throw new ErrorHandler(
-                            "One or more selected cakes are no longer available",
-                            400,
-                        );
-                    }
-
-                    if (cake.stock < cartItem.quantity) {
-                        throw new ErrorHandler(
-                            `Insufficient stock for "${cake.name.en}"`,
-                            400,
-                        );
-                    }
-
-                    if (cake.price == null || cake.price < 0) {
-                        throw new ErrorHandler(
-                            `Invalid price for "${cake.name.en}"`,
-                            500,
-                        );
-                    }
-
-                    /*
-                     * Keep the existing backend pricing behavior:
-                     * the order uses the current Cake.price.
-                     */
-                    const itemTotal = cake.price * cartItem.quantity;
-
-                    subtotal += itemTotal;
-
-                    orderItems.push({
-                        cake: cake._id,
-                        name: {
-                            en: cake.name.en,
-                            ar: cake.name.ar,
-                        },
-                        imageUrl: cake.images?.[0]?.url,
-                        price: cake.price,
-                        quantity: cartItem.quantity,
-                        totalPrice: itemTotal,
-                    });
+                if (cake.stock < cartItem.quantity) {
+                    throw new ErrorHandler(
+                        `Insufficient stock for "${cake.name.en}"`,
+                        400,
+                    );
                 }
-            }
 
-            /*
-             * ---------------------------------------------------------
-             * ADD-ONS
-             * ---------------------------------------------------------
-             */
+                if (cake.price == null || cake.price < 0) {
+                    throw new ErrorHandler(
+                        `Invalid price for "${cake.name.en}"`,
+                        500,
+                    );
+                }
+
+                const itemTotal = cake.price * cartItem.quantity;
+
+                subtotal += itemTotal;
+
+                orderItems.push({
+                    cake: cake._id,
+                    name: {
+                        en: cake.name.en,
+                        ar: cake.name.ar,
+                    },
+                    imageUrl: cake.images?.[0]?.url,
+                    price: cake.price,
+                    quantity: cartItem.quantity,
+                    totalPrice: itemTotal,
+                });
+            }
 
             const orderAddOns = [];
             const selectedAddOnIds = [];
 
+            // Get selected add-ons
             if (addOns.length) {
                 const addOnIds = addOns.map((item) => item.addOnId);
 
-                /*
-                 * Do not allow the same add-on to appear multiple
-                 * times in the order payload.
-                 */
-                const uniqueAddOnIds = new Set(
-                    addOnIds.map((id) => id.toString()),
-                );
+                const uniqueAddOnIds = new Set(addOnIds);
 
                 if (uniqueAddOnIds.size !== addOnIds.length) {
                     throw new ErrorHandler(
@@ -174,10 +122,7 @@ export const createOrder = asyncHandler(async (req, res) => {
                     );
                 }
 
-                /*
-                 * Make sure every requested add-on actually exists
-                 * in the user's cart.
-                 */
+                // Make sure selected add-ons actually exist in the user's cart
                 const cartAddOnIds = new Set(
                     cart.addOns.map((item) => item.addOn.toString()),
                 );
@@ -191,9 +136,6 @@ export const createOrder = asyncHandler(async (req, res) => {
                     }
                 }
 
-                /*
-                 * Get the latest AddOn documents from the database.
-                 */
                 const addOnDocuments = await AddOn.find({
                     _id: { $in: addOnIds },
                     isActive: true,
@@ -249,10 +191,7 @@ export const createOrder = asyncHandler(async (req, res) => {
                         );
                     }
 
-                    /*
-                     * The order cannot contain more add-ons than
-                     * the quantity currently stored in the cart.
-                     */
+                    // Do not allow ordering more than the quantity stored in cart
                     if (selectedAddOn.quantity > cartAddOn.quantity) {
                         throw new ErrorHandler(
                             "Add-on quantity exceeds the quantity in your cart",
@@ -280,22 +219,9 @@ export const createOrder = asyncHandler(async (req, res) => {
                 }
             }
 
-            /*
-             * ---------------------------------------------------------
-             * ORDER TOTAL
-             * ---------------------------------------------------------
-             */
-
             const discount = 0;
             const deliveryFee = 0;
-
             const totalPrice = subtotal - discount + deliveryFee;
-
-            /*
-             * ---------------------------------------------------------
-             * CREATE ORDER
-             * ---------------------------------------------------------
-             */
 
             const [order] = await Order.create(
                 [
@@ -325,21 +251,13 @@ export const createOrder = asyncHandler(async (req, res) => {
                 { session },
             );
 
-            /*
-             * ---------------------------------------------------------
-             * RESERVE CAKE STOCK
-             * ---------------------------------------------------------
-             *
-             * Nothing happens here for add-on-only orders.
-             */
+            // Reserve cake stock
             for (const cartItem of selectedCartItems) {
                 const result = await Cake.updateOne(
                     {
                         _id: cartItem.cake,
                         isActive: true,
-                        stock: {
-                            $gte: cartItem.quantity,
-                        },
+                        stock: { $gte: cartItem.quantity },
                     },
                     {
                         $inc: {
@@ -358,103 +276,37 @@ export const createOrder = asyncHandler(async (req, res) => {
             }
 
             /*
-             * ---------------------------------------------------------
-             * CART CLEANUP
-             * ---------------------------------------------------------
+             * For COD:
              *
-             * COD:
-             * The order is already confirmed as placed, so remove
-             * the ordered quantities from the cart immediately.
+             * The order is already confirmed as a placed order, so remove
+             * the ordered cakes and add-ons from the user's cart.
              *
-             * ONLINE:
-             * Keep the cart unchanged until payment succeeds.
+             * For online payment:
+             *
+             * Keep the cart unchanged until payment is successfully completed.
              */
             if (paymentMethod === "cash_on_delivery") {
-                /*
-                 * Remove the selected cake cart items.
-                 *
-                 * Cake checkout currently orders the complete cart
-                 * quantity for each selected cake, so pulling the
-                 * selected cake IDs is correct.
-                 */
-                if (selectedCakeIds.length) {
-                    await Cart.updateOne(
-                        {
-                            _id: cart._id,
-                            user: req.user._id,
-                        },
-                        {
-                            $pull: {
-                                items: {
-                                    cake: {
-                                        $in: selectedCakeIds,
-                                    },
+                await Cart.updateOne(
+                    {
+                        _id: cart._id,
+                        user: req.user._id,
+                    },
+                    {
+                        $pull: {
+                            items: {
+                                cake: {
+                                    $in: selectedCakeIds,
+                                },
+                            },
+                            addOns: {
+                                addOn: {
+                                    $in: selectedAddOnIds,
                                 },
                             },
                         },
-                        { session },
-                    );
-                }
-
-                /*
-                 * Add-ons need quantity-aware cleanup.
-                 *
-                 * If the user has:
-                 *
-                 * Cart:     3 candles
-                 * Order:    1 candle
-                 *
-                 * Cart must become:
-                 *
-                 * Cart:     2 candles
-                 *
-                 * It should NOT remove the entire add-on item.
-                 */
-                for (const selectedAddOn of orderAddOns) {
-                    const cartAddOn = cart.addOns.find(
-                        (item) =>
-                            item.addOn.toString() ===
-                            selectedAddOn.addOn.toString(),
-                    );
-
-                    if (!cartAddOn) {
-                        continue;
-                    }
-
-                    const remainingQuantity =
-                        cartAddOn.quantity - selectedAddOn.quantity;
-
-                    if (remainingQuantity <= 0) {
-                        await Cart.updateOne(
-                            {
-                                _id: cart._id,
-                                user: req.user._id,
-                            },
-                            {
-                                $pull: {
-                                    addOns: {
-                                        addOn: selectedAddOn.addOn,
-                                    },
-                                },
-                            },
-                            { session },
-                        );
-                    } else {
-                        await Cart.updateOne(
-                            {
-                                _id: cart._id,
-                                user: req.user._id,
-                                "addOns.addOn": selectedAddOn.addOn,
-                            },
-                            {
-                                $set: {
-                                    "addOns.$.quantity": remainingQuantity,
-                                },
-                            },
-                            { session },
-                        );
-                    }
-                }
+                    },
+                    { session },
+                );
             }
 
             createdOrder = order;
@@ -538,12 +390,6 @@ export const cancelMyOrder = asyncHandler(async (req, res) => {
                 );
             }
 
-            /*
-             * Restore reserved cake stock.
-             *
-             * Add-ons do not have stock reservation here,
-             * so there is nothing to restore for add-ons.
-             */
             for (const item of order.items) {
                 await Cake.updateOne(
                     {
@@ -645,12 +491,6 @@ export const updateOrderStatus = asyncHandler(async (req, res) => {
                 );
             }
 
-            /*
-             * -----------------------------------------------------
-             * CANCEL ORDER
-             * -----------------------------------------------------
-             */
-
             if (status === "cancelled") {
                 if (order.paymentMethod !== "cash_on_delivery") {
                     throw new ErrorHandler(
@@ -666,9 +506,6 @@ export const updateOrderStatus = asyncHandler(async (req, res) => {
                     );
                 }
 
-                /*
-                 * Restore cake stock.
-                 */
                 for (const item of order.items) {
                     await Cake.updateOne(
                         {
@@ -700,12 +537,6 @@ export const updateOrderStatus = asyncHandler(async (req, res) => {
                 return;
             }
 
-            /*
-             * -----------------------------------------------------
-             * ONLINE PAYMENT VALIDATION
-             * -----------------------------------------------------
-             */
-
             if (
                 status === "confirmed" &&
                 order.paymentMethod === "online" &&
@@ -716,12 +547,6 @@ export const updateOrderStatus = asyncHandler(async (req, res) => {
                     400,
                 );
             }
-
-            /*
-             * -----------------------------------------------------
-             * STATUS TRANSITIONS
-             * -----------------------------------------------------
-             */
 
             const allowedTransitions = {
                 pending: ["confirmed"],
