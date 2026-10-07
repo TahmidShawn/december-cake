@@ -23,7 +23,7 @@ export const createOrder = asyncHandler(async (req, res) => {
                 throw new ErrorHandler("Your cart is empty", 400);
             }
 
-            // get selected cart items
+            // Get selected cart items
             const selectedCartItems = cart.items.filter((item) =>
                 cakeIds.includes(item.cake.toString()),
             );
@@ -35,7 +35,7 @@ export const createOrder = asyncHandler(async (req, res) => {
                 );
             }
 
-            // check selected cakes are in cart
+            // Check selected cakes are in cart
             if (selectedCartItems.length !== cakeIds.length) {
                 throw new ErrorHandler(
                     "One or more selected items are not in your cart",
@@ -45,7 +45,7 @@ export const createOrder = asyncHandler(async (req, res) => {
 
             const selectedCakeIds = selectedCartItems.map((item) => item.cake);
 
-            // get latest cake data
+            // Get latest cake data
             const cakes = await Cake.find({
                 _id: { $in: selectedCakeIds },
                 isActive: true,
@@ -107,8 +107,9 @@ export const createOrder = asyncHandler(async (req, res) => {
             }
 
             const orderAddOns = [];
+            const selectedAddOnIds = [];
 
-            // get selected add-ons
+            // Get selected add-ons
             if (addOns.length) {
                 const addOnIds = addOns.map((item) => item.addOnId);
 
@@ -119,6 +120,20 @@ export const createOrder = asyncHandler(async (req, res) => {
                         "Duplicate add-ons are not allowed",
                         400,
                     );
+                }
+
+                // Make sure selected add-ons actually exist in the user's cart
+                const cartAddOnIds = new Set(
+                    cart.addOns.map((item) => item.addOn.toString()),
+                );
+
+                for (const addOnId of addOnIds) {
+                    if (!cartAddOnIds.has(addOnId.toString())) {
+                        throw new ErrorHandler(
+                            "One or more selected add-ons are not in your cart",
+                            400,
+                        );
+                    }
                 }
 
                 const addOnDocuments = await AddOn.find({
@@ -141,7 +156,9 @@ export const createOrder = asyncHandler(async (req, res) => {
                 );
 
                 for (const selectedAddOn of addOns) {
-                    const addOn = addOnMap.get(selectedAddOn.addOnId);
+                    const addOn = addOnMap.get(
+                        selectedAddOn.addOnId.toString(),
+                    );
 
                     if (!addOn) {
                         throw new ErrorHandler(
@@ -152,10 +169,32 @@ export const createOrder = asyncHandler(async (req, res) => {
 
                     if (
                         !Number.isInteger(selectedAddOn.quantity) ||
-                        selectedAddOn.quantity < 1
+                        selectedAddOn.quantity < 1 ||
+                        selectedAddOn.quantity > 50
                     ) {
                         throw new ErrorHandler(
-                            "Add-on quantity must be at least 1",
+                            "Add-on quantity must be between 1 and 50",
+                            400,
+                        );
+                    }
+
+                    const cartAddOn = cart.addOns.find(
+                        (item) =>
+                            item.addOn.toString() ===
+                            selectedAddOn.addOnId.toString(),
+                    );
+
+                    if (!cartAddOn) {
+                        throw new ErrorHandler(
+                            "One or more selected add-ons are not in your cart",
+                            400,
+                        );
+                    }
+
+                    // Do not allow ordering more than the quantity stored in cart
+                    if (selectedAddOn.quantity > cartAddOn.quantity) {
+                        throw new ErrorHandler(
+                            "Add-on quantity exceeds the quantity in your cart",
                             400,
                         );
                     }
@@ -163,6 +202,8 @@ export const createOrder = asyncHandler(async (req, res) => {
                     const addOnTotal = addOn.price * selectedAddOn.quantity;
 
                     subtotal += addOnTotal;
+
+                    selectedAddOnIds.push(addOn._id);
 
                     orderAddOns.push({
                         addOn: addOn._id,
@@ -210,7 +251,7 @@ export const createOrder = asyncHandler(async (req, res) => {
                 { session },
             );
 
-            // reserve cake stock
+            // Reserve cake stock
             for (const cartItem of selectedCartItems) {
                 const result = await Cake.updateOne(
                     {
@@ -234,7 +275,16 @@ export const createOrder = asyncHandler(async (req, res) => {
                 }
             }
 
-            // remove selected cakes from cart
+            /*
+             * For COD:
+             *
+             * The order is already confirmed as a placed order, so remove
+             * the ordered cakes and add-ons from the user's cart.
+             *
+             * For online payment:
+             *
+             * Keep the cart unchanged until payment is successfully completed.
+             */
             if (paymentMethod === "cash_on_delivery") {
                 await Cart.updateOne(
                     {
@@ -246,6 +296,11 @@ export const createOrder = asyncHandler(async (req, res) => {
                             items: {
                                 cake: {
                                     $in: selectedCakeIds,
+                                },
+                            },
+                            addOns: {
+                                addOn: {
+                                    $in: selectedAddOnIds,
                                 },
                             },
                         },
