@@ -16,7 +16,7 @@ const shippingAddressSchema = z
             .string({ error: "Phone number is required" })
             .trim()
             .regex(
-                /^(?:\+965\s?)?[569]\d{3}\s?\d{4}$/,
+                /^(\+965)?[569]\d{7}$/,
                 "Please enter a valid Kuwait phone number",
             ),
 
