@@ -8,6 +8,7 @@ const cartSchema = new mongoose.Schema(
             required: true,
             unique: true,
         },
+
         items: {
             type: [
                 {
@@ -31,6 +32,30 @@ const cartSchema = new mongoose.Schema(
                 message: "Cart cannot contain more than 50 items",
             },
         },
+
+        addOns: {
+            type: [
+                {
+                    addOn: {
+                        type: mongoose.Schema.Types.ObjectId,
+                        ref: "AddOn",
+                        required: true,
+                    },
+                    quantity: {
+                        type: Number,
+                        required: true,
+                        min: 1,
+                        max: 50,
+                        default: 1,
+                    },
+                    _id: false,
+                },
+            ],
+            validate: {
+                validator: (addOns) => addOns.length <= 50,
+                message: "Cart cannot contain more than 50 add-ons",
+            },
+        },
     },
     {
         timestamps: true,
@@ -48,7 +73,7 @@ const cartSchema = new mongoose.Schema(
     },
 );
 
-// clean up in 60 days if unused
+// Clean up in 60 days if unused.
 cartSchema.index(
     {
         updatedAt: 1,
