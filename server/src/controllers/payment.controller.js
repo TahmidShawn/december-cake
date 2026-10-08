@@ -100,6 +100,7 @@ export const createPayment = asyncHandler(async (req, res) => {
             },
         });
     } catch (error) {
+        console.error("[createPayment] MyFatoorah failed:", error);
         throw new ErrorHandler("Unable to create payment", 502);
     }
 });
