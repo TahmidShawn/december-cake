@@ -86,9 +86,6 @@ export const createPayment = asyncHandler(async (req, res) => {
             },
         });
 
-        // Temporary: verify the real response field names, remove once it works
-        logger.info({ result }, "[createPayment] MyFatoorah response");
-
         payment.invoiceId = result.InvoiceId;
         payment.paymentUrl = result.PaymentURL;
         payment.status = "pending";
@@ -115,8 +112,6 @@ export const createPayment = asyncHandler(async (req, res) => {
 export const paymentCallback = asyncHandler(async (req, res) => {
     const failedUrl = `${process.env.CLIENT_URL}/payment/failed`;
 
-    logger.info({ query: req.query }, "[paymentCallback] received");
-
     const result = paymentCallbackSchema.safeParse(req.query);
 
     if (!result.success) {
@@ -131,9 +126,6 @@ export const paymentCallback = asyncHandler(async (req, res) => {
 
     try {
         const paymentResult = await getMyFatoorahPayment(paymentId);
-
-        // Temporary: check the real response shape, remove once it works
-        logger.info({ paymentResult }, "[paymentCallback] MyFatoorah result");
 
         const invoiceStatus = paymentResult?.Invoice?.Status;
         const transaction = paymentResult?.Transaction;
@@ -154,15 +146,19 @@ export const paymentCallback = asyncHandler(async (req, res) => {
             const markResult = await markPaymentAsPaid({
                 paymentId: payment._id,
                 transaction,
+                amount: paymentResult?.Amount?.ValueInPayCurrency,
             });
-
-            logger.info({ markResult }, "[paymentCallback] markPaymentAsPaid");
 
             if (markResult === "paid") {
                 return res.redirect(
                     `${process.env.CLIENT_URL}/payment/success?orderId=${payment.order}`,
                 );
             }
+
+            logger.warn(
+                { markResult, orderId: payment.order },
+                "[paymentCallback] payment not marked as paid",
+            );
 
             return res.redirect(
                 `${process.env.CLIENT_URL}/payment/failed?orderId=${payment.order}`,
@@ -171,7 +167,7 @@ export const paymentCallback = asyncHandler(async (req, res) => {
 
         logger.warn(
             { invoiceStatus, transactionStatus: transaction?.Status },
-            "[paymentCallback] payment not marked as paid",
+            "[paymentCallback] payment not paid",
         );
 
         if (invoiceStatus === "EXPIRED" && payment.status === "pending") {
@@ -253,6 +249,7 @@ export const myFatoorahWebhook = asyncHandler(async (req, res) => {
         await markPaymentAsPaid({
             paymentId: payment._id,
             transaction: latestTransaction,
+            amount: paymentResult?.Amount?.ValueInPayCurrency,
         });
     } else if (invoiceStatus === "EXPIRED" && payment.status === "pending") {
         await releaseStockForExpiredPayment({
@@ -263,6 +260,6 @@ export const myFatoorahWebhook = asyncHandler(async (req, res) => {
 
     return res.status(200).json({
         success: true,
-        message: "Webhook processed",
+        message: "Payment webhook processed",
     });
 });

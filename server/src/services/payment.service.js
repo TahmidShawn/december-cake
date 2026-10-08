@@ -6,7 +6,12 @@ import Cake from "../models/cake.model.js";
 
 const roundKwd = (value) => Math.round((value + Number.EPSILON) * 1000) / 1000;
 
-export const markPaymentAsPaid = async ({ paymentId, transaction }) => {
+/*
+ * `amount` is the paid amount from the MyFatoorah response
+ * (paymentResult.Amount.ValueInPayCurrency). In the v3 response it lives next
+ * to `Transaction`, not inside it, so the controller passes it in.
+ */
+export const markPaymentAsPaid = async ({ paymentId, transaction, amount }) => {
     const session = await mongoose.startSession();
 
     let result = "ignored";
@@ -41,7 +46,7 @@ export const markPaymentAsPaid = async ({ paymentId, transaction }) => {
             }
 
             const transactionAmount = Number(
-                transaction.Amount?.ValueInPayCurrency,
+                amount ?? transaction.Amount?.ValueInPayCurrency,
             );
 
             if (!Number.isFinite(transactionAmount)) {
@@ -127,6 +132,11 @@ export const markPaymentAsPaid = async ({ paymentId, transaction }) => {
                         items: {
                             cake: {
                                 $in: order.items.map((item) => item.cake),
+                            },
+                        },
+                        addOns: {
+                            addOn: {
+                                $in: order.addOns.map((item) => item.addOn),
                             },
                         },
                     },
