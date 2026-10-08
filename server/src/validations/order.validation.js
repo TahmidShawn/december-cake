@@ -4,6 +4,28 @@ const objectId = z
     .string({ error: "ID is required" })
     .regex(/^[0-9a-fA-F]{24}$/, "Invalid ID");
 
+const extractKuwaitLocalNumber = (value = "") => {
+    let digits = String(value).replace(/\D/g, "");
+
+    if (digits.startsWith("00965")) {
+        digits = digits.slice(5);
+    } else if (digits.startsWith("965") && digits.length === 11) {
+        digits = digits.slice(3);
+    }
+
+    return digits;
+};
+
+const kuwaitPhoneSchema = z
+    .string({ error: "Phone number is required" })
+    .trim()
+    .min(1, "Phone number is required")
+    .transform(extractKuwaitLocalNumber)
+    .refine((digits) => /^[2-9]\d{7}$/.test(digits), {
+        message: "Please enter a valid 8-digit Kuwait phone number",
+    })
+    .transform((digits) => `+965${digits}`);
+
 const shippingAddressSchema = z
     .object({
         fullName: z
@@ -12,13 +34,7 @@ const shippingAddressSchema = z
             .min(4, "Full name must be at least 4 characters")
             .max(30, "Full name cannot exceed 30 characters"),
 
-        phone: z
-            .string({ error: "Phone number is required" })
-            .trim()
-            .regex(
-                /^(\+965)?[569]\d{7}$/,
-                "Please enter a valid Kuwait phone number",
-            ),
+        phone: kuwaitPhoneSchema,
 
         governorate: z.enum(
             [
