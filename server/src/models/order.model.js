@@ -28,13 +28,15 @@ const orderSchema = new mongoose.Schema(
                 type: String,
                 required: true,
                 trim: true,
+                minLength: [4, "Full name must be at least 4 characters"],
                 maxLength: [30, "Full name cannot exceed 30 characters"],
             },
 
+            // Stored in normalized form: +965XXXXXXXX
             phone: {
                 type: String,
                 required: true,
-                match: [/^(\+965)?[569]\d{7}$/, "Invalid Kuwait phone number"],
+                match: [/^(\+965)?[2-9]\d{7}$/, "Invalid Kuwait phone number"],
             },
 
             governorate: {

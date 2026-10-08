@@ -6,6 +6,9 @@ import AddOn from "../models/addOn.model.js";
 import ErrorHandler from "../utils/errorHandler.js";
 import asyncHandler from "../utils/asyncHandler.js";
 
+// KWD uses 3 decimal places
+const round3 = (value) => Number(Number(value).toFixed(3));
+
 export const createOrder = asyncHandler(async (req, res) => {
     const { paymentMethod, cakeIds, addOns = [], shippingAddress } = req.body;
 
@@ -63,7 +66,11 @@ export const createOrder = asyncHandler(async (req, res) => {
             );
 
             const orderItems = [];
+
+            // Price before discount (sum of original prices)
             let subtotal = 0;
+            // Total savings from cake discounts
+            let discount = 0;
 
             for (const cartItem of selectedCartItems) {
                 const cake = cakeMap.get(cartItem.cake.toString());
@@ -89,9 +96,16 @@ export const createOrder = asyncHandler(async (req, res) => {
                     );
                 }
 
-                const itemTotal = cake.price * cartItem.quantity;
+                // Price the customer actually pays (after cake discount)
+                const unitPrice = round3(cake.discountedPrice ?? cake.price);
 
-                subtotal += itemTotal;
+                const originalLineTotal = round3(
+                    cake.price * cartItem.quantity,
+                );
+                const itemTotal = round3(unitPrice * cartItem.quantity);
+
+                subtotal += originalLineTotal;
+                discount += originalLineTotal - itemTotal;
 
                 orderItems.push({
                     cake: cake._id,
@@ -100,7 +114,7 @@ export const createOrder = asyncHandler(async (req, res) => {
                         ar: cake.name.ar,
                     },
                     imageUrl: cake.images?.[0]?.url,
-                    price: cake.price,
+                    price: unitPrice,
                     quantity: cartItem.quantity,
                     totalPrice: itemTotal,
                 });
@@ -199,7 +213,10 @@ export const createOrder = asyncHandler(async (req, res) => {
                         );
                     }
 
-                    const addOnTotal = addOn.price * selectedAddOn.quantity;
+                    // Add-ons have no discount
+                    const addOnTotal = round3(
+                        addOn.price * selectedAddOn.quantity,
+                    );
 
                     subtotal += addOnTotal;
 
@@ -219,9 +236,13 @@ export const createOrder = asyncHandler(async (req, res) => {
                 }
             }
 
-            const discount = 0;
             const deliveryFee = 0;
-            const totalPrice = subtotal - discount + deliveryFee;
+
+            subtotal = round3(subtotal);
+            discount = round3(discount);
+
+            // Same number the customer sees on the checkout page
+            const totalPrice = round3(subtotal - discount + deliveryFee);
 
             const [order] = await Order.create(
                 [
