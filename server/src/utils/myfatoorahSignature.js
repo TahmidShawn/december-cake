@@ -32,6 +32,16 @@ export const verifyMyFatoorahSignature = (req) => {
         return false;
     }
 
+    // Fail closed: if no secret is configured (e.g. local dev without the
+    // portal webhook secret yet), reject the webhook instead of crashing.
+    const secret = process.env.MYFATOORAH_WEBHOOK_SECRET;
+    if (!secret) {
+        logger.error(
+            "[webhook] MYFATOORAH_WEBHOOK_SECRET not set - rejecting webhook (fail closed)",
+        );
+        return false;
+    }
+
     const data = req.body?.Data || {};
     const signatureData = getWebhookSignatureFields(data).join(",");
 
@@ -40,7 +50,7 @@ export const verifyMyFatoorahSignature = (req) => {
         return false;
     }
 
-    const expectedSignature = hmacSha256(process.env.MYFATOORAH_WEBHOOK_SECRET, signatureData);
+    const expectedSignature = hmacSha256(secret, signatureData);
 
     const receivedBuffer = Buffer.from(signature);
     const expectedBuffer = Buffer.from(expectedSignature);

@@ -17,12 +17,22 @@ const requiredEnv = [
     "SMTP_PASSWORD",
     "MYFATOORAH_API_URL",
     "MYFATOORAH_API_KEY",
-    "MYFATOORAH_WEBHOOK_SECRET",
     "MYFATOORAH_REDIRECTION_URL",
 ];
 
+// Enforced only in production. In dev/test these can be omitted so the server
+// still boots (the webhook secret is generated later in the MyFatoorah portal).
+const productionEnv = ["MYFATOORAH_WEBHOOK_SECRET"];
+
 const validateEnv = () => {
     const missing = requiredEnv.filter((key) => !process.env[key]);
+
+    if (process.env.NODE_ENV === "production") {
+        missing.push(
+            ...productionEnv.filter((key) => !process.env[key]),
+        );
+    }
+
     if (missing.length > 0) {
         throw new Error(
             `Missing required environment variables: ${missing.join(", ")}`,
