@@ -77,16 +77,25 @@ const getConfig = () => {
     return { baseUrl, apiKey };
 };
 
+const GATEWAY_TIMEOUT_MS = 20_000;
+
 const myFatoorahRequest = async (endpoint, options = {}) => {
     const { baseUrl, apiKey } = getConfig();
     const url = `${baseUrl}${endpoint}`;
 
+    // Unique idempotency key per payment call so MyFatoorah can safely retry
+    // without creating duplicate invoices on the gateway side.
+    const idempotencyKey = `order_${options?.orderId ?? Date.now()}_${Math.random()
+        .toString(36)
+        .slice(2, 10)}`;
+
     const response = await fetch(url, {
         ...options,
-        signal: AbortSignal.timeout(20000),
+        signal: AbortSignal.timeout(GATEWAY_TIMEOUT_MS),
         headers: {
             Authorization: `Bearer ${apiKey}`,
             "Content-Type": "application/json",
+            "x-idempotency-key": idempotencyKey,
             ...(options.headers || {}),
         },
     });

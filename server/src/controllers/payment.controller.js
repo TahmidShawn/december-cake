@@ -35,6 +35,8 @@ export const createPayment = asyncHandler(async (req, res) => {
         throw new ErrorHandler("This order can no longer be paid", 400);
     }
 
+    // Idempotent lookup: a pending payment already exists with an invoice.
+    // Return the SAME URL instead of creating a duplicate invoice.
     let payment = await Payment.findOne({
         order: order._id,
     });
@@ -108,8 +110,8 @@ export const createPayment = asyncHandler(async (req, res) => {
         throw new ErrorHandler("Unable to create payment", 502);
     }
 });
-
 export const paymentCallback = asyncHandler(async (req, res) => {
+    // Base failed URL (no orderId yet — the payment record is resolved below).
     const failedUrl = `${process.env.CLIENT_URL}/payment/failed`;
 
     const result = paymentCallbackSchema.safeParse(req.query);
@@ -185,11 +187,10 @@ export const paymentCallback = asyncHandler(async (req, res) => {
         return res.redirect(failedUrl);
     }
 });
-
 export const myFatoorahWebhook = asyncHandler(async (req, res) => {
+    // Verify the signature first. If invalid, do not trust the payload.
     if (!verifyMyFatoorahSignature(req)) {
         logger.warn("[webhook] invalid signature");
-
         return res.status(401).json({
             success: false,
             message: "Invalid webhook signature",
@@ -198,7 +199,17 @@ export const myFatoorahWebhook = asyncHandler(async (req, res) => {
 
     const event = req.body;
 
-    if (event?.Event?.Name !== "PAYMENT_STATUS_CHANGED") {
+    if (!event?.Event?.Name) {
+        logger.warn("[webhook] missing Event.Name");
+        return res.status(400).json({
+            success: false,
+            message: "Missing event name",
+        });
+    }
+
+    // Only handle the payment status change event.
+    if (event.Event.Name !== "PAYMENT_STATUS_CHANGED") {
+        logger.info({ eventName: event.Event.Name }, "[webhook] event ignored");
         return res.status(200).json({
             success: true,
             message: "Event ignored",
@@ -215,23 +226,22 @@ export const myFatoorahWebhook = asyncHandler(async (req, res) => {
         });
     }
 
-    const payment = await Payment.findOne({
+    // Idempotency guard: a payment for this invoice already exists and is
+    // already paid -> do nothing, avoid double-confirmation.
+    const existingPayment = await Payment.findOne({
         invoiceId: invoice.Id.toString(),
     });
 
-    if (!payment) {
-        logger.warn({ invoiceId: invoice.Id }, "[webhook] payment not found");
-
-        return res.status(404).json({
-            success: false,
-            message: "Payment not found",
+    if (existingPayment?.status === "paid") {
+        logger.info(
+            { invoiceId: invoice.Id },
+            "[webhook] payment already confirmed, ignoring duplicate",
+        );
+        return res.status(200).json({
+            success: true,
+            message: "Payment already confirmed",
         });
     }
-
-    payment.lastWebhookAt = new Date();
-    payment.lastWebhookReference = event.Event?.Reference;
-
-    await payment.save();
 
     if (!transaction?.PaymentId) {
         return res.status(400).json({
@@ -246,14 +256,59 @@ export const myFatoorahWebhook = asyncHandler(async (req, res) => {
     const latestTransaction = paymentResult?.Transaction;
 
     if (invoiceStatus === "PAID" && latestTransaction?.Status === "SUCCESS") {
+        const roundTo3 = (value) =>
+            Math.round((Number(value) + Number.EPSILON) * 1000) / 1000;
+
+        const expectedAmount = roundTo3(existingPayment?.amount ?? 0);
+        const actualAmount = Number(paymentResult?.Amount?.ValueInPayCurrency);
+
+        if (
+            !Number.isFinite(actualAmount) ||
+            Math.abs(actualAmount - expectedAmount) > 0.001
+        ) {
+            logger.warn(
+                {
+                    invoiceId: invoice.Id,
+                    expected: expectedAmount,
+                    actual: actualAmount,
+                },
+                "[webhook] amount mismatch, skipping payment",
+            );
+            return res.status(200).json({
+                success: true,
+                message: "Amount mismatch, not processing payment",
+            });
+        }
+
+        if (!existingPayment?._id) {
+            logger.error(
+                { invoiceId: invoice.Id },
+                "[webhook] paid invoice has no local payment record",
+            );
+            return res.status(200).json({
+                success: true,
+                message: "Payment record not found, ignoring",
+            });
+        }
+
         await markPaymentAsPaid({
-            paymentId: payment._id,
+            paymentId: existingPayment._id,
             transaction: latestTransaction,
-            amount: paymentResult?.Amount?.ValueInPayCurrency,
+            amount: actualAmount,
         });
-    } else if (invoiceStatus === "EXPIRED" && payment.status === "pending") {
+    } else if (
+        invoiceStatus === "EXPIRED" &&
+        existingPayment?.status === "pending"
+    ) {
+        if (!existingPayment?._id) {
+            return res.status(200).json({
+                success: true,
+                message: "Payment record not found, ignoring",
+            });
+        }
+
         await releaseStockForExpiredPayment({
-            paymentId: payment._id,
+            paymentId: existingPayment._id,
             reason: "Invoice expired",
         });
     }

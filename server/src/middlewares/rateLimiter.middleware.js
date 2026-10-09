@@ -22,3 +22,14 @@ export const authLimiter = rateLimit({
     standardHeaders: true,
     legacyHeaders: false,
 });
+
+export const webhookLimiter = rateLimit({
+    windowMs: 60 * 60 * 1000, // 1 hour
+    limit: 5, // 5 webhook attempts per IP per hour
+    standardHeaders: true,
+    legacyHeaders: false,
+    message: {
+        success: false,
+        message: "Too many webhook attempts. Please try again later.",
+    },
+});

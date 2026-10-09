@@ -1,35 +1,64 @@
 import crypto from "crypto";
+import logger from "./logger.js";
+
+const WEBHOOK_SIGNATURE_HEADER = "myfatoorah-signature";
+const WEBHOOK_SIGNATURE_FIELDS = [
+    "Invoice.Id",
+    "Invoice.Status",
+    "Transaction.Status",
+    "Transaction.PaymentId",
+    "Invoice.ExternalIdentifier",
+];
+
+export const getWebhookSignatureFields = (data) => {
+    const invoice = data?.Invoice || {};
+    const transaction = data?.Transaction || {};
+
+    return WEBHOOK_SIGNATURE_FIELDS.map((field) => {
+        const [entity, key] = field.split(".");
+        const value = entity === "Invoice" ? invoice[key] ?? "" : transaction[key] ?? "";
+        return `${field}=${value ?? ""}`;
+    });
+};
+
+const hmacSha256 = (secret, payload) =>
+    crypto.createHmac("sha256", secret).update(payload, "utf8").digest("base64");
 
 export const verifyMyFatoorahSignature = (req) => {
-    const signature = req.headers["myfatoorah-signature"];
+    const signature = req.headers[WEBHOOK_SIGNATURE_HEADER];
 
     if (!signature) {
+        logger.warn("[webhook] signature header missing");
         return false;
     }
 
     const data = req.body?.Data || {};
-    const invoice = data.Invoice || {};
-    const transaction = data.Transaction || {};
+    const signatureData = getWebhookSignatureFields(data).join(",");
 
-    const signatureData = [
-        `Invoice.Id=${invoice.Id ?? ""}`,
-        `Invoice.Status=${invoice.Status ?? ""}`,
-        `Transaction.Status=${transaction.Status ?? ""}`,
-        `Transaction.PaymentId=${transaction.PaymentId ?? ""}`,
-        `Invoice.ExternalIdentifier=${invoice.ExternalIdentifier ?? ""}`,
-    ].join(",");
+    if (!signatureData) {
+        logger.warn("[webhook] signature payload empty");
+        return false;
+    }
 
-    const expectedSignature = crypto
-        .createHmac("sha256", process.env.MYFATOORAH_WEBHOOK_SECRET)
-        .update(signatureData, "utf8")
-        .digest("base64");
+    const expectedSignature = hmacSha256(process.env.MYFATOORAH_WEBHOOK_SECRET, signatureData);
 
     const receivedBuffer = Buffer.from(signature);
     const expectedBuffer = Buffer.from(expectedSignature);
 
     if (receivedBuffer.length !== expectedBuffer.length) {
+        logger.warn({
+            receivedLength: receivedBuffer.length,
+            expectedLength: expectedBuffer.length,
+            receivedStart: receivedBuffer.toString("hex", 0, Math.min(receivedBuffer.length, 32)),
+        });
         return false;
     }
 
-    return crypto.timingSafeEqual(receivedBuffer, expectedBuffer);
+    const isValid = crypto.timingSafeEqual(receivedBuffer, expectedBuffer);
+
+    if (!isValid) {
+        logger.warn("[webhook] signature mismatch");
+    }
+
+    return isValid;
 };

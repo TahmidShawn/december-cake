@@ -7,6 +7,7 @@ const requiredEnv = [
     "CLIENT_URL",
     "JWT_SECRET",
     "JWT_EXPIRE",
+    "COOKIE_EXPIRE",
     "REFRESH_TOKEN_SECRET",
     "REFRESH_TOKEN_EXPIRE",
     "COOKIE_EXPIRE",
@@ -14,6 +15,10 @@ const requiredEnv = [
     "SMTP_PORT",
     "SMTP_MAIL",
     "SMTP_PASSWORD",
+    "MYFATOORAH_API_URL",
+    "MYFATOORAH_API_KEY",
+    "MYFATOORAH_WEBHOOK_SECRET",
+    "MYFATOORAH_REDIRECTION_URL",
 ];
 
 const validateEnv = () => {
