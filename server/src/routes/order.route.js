@@ -6,6 +6,7 @@ import {
     getMyOrder,
     getMyOrders,
     getOrder,
+    trackOrder,
     updateOrderStatus,
 } from "../controllers/order.controller.js";
 import {
@@ -23,6 +24,9 @@ router
     .get(isAuthenticatedUser, authorizeRoles("admin"), getAllOrders);
 
 router.route("/orders").get(isAuthenticatedUser, getMyOrders);
+
+// Public order tracking by order number (must come before /order/:id)
+router.route("/order/track/:orderNumber").get(trackOrder);
 
 router
     .route("/order/:id")

@@ -379,6 +379,61 @@ export const getMyOrder = asyncHandler(async (req, res) => {
     });
 });
 
+/*
+ * Public order tracking by order number (no authentication).
+ *
+ * Guests can check delivery progress with just their order number. Only
+ * non-sensitive fields are returned — never the buyer, contact details or
+ * full address — so one customer cannot see another's information.
+ */
+export const trackOrder = asyncHandler(async (req, res) => {
+    const { orderNumber } = req.params;
+
+    const order = await Order.findOne({
+        orderNumber: String(orderNumber).trim().toUpperCase(),
+    }).select(
+        "orderNumber orderStatus paymentStatus paymentMethod createdAt updatedAt deliveredAt cancelledAt cancellationReason statusHistory items addOns",
+    );
+
+    if (!order) {
+        throw new ErrorHandler(
+            "Order not found. Please check your order number",
+            404,
+        );
+    }
+
+    const itemCount =
+        (order.items?.length ?? 0) + (order.addOns?.length ?? 0);
+
+    const totalQuantity =
+        (order.items ?? []).reduce(
+            (sum, item) => sum + (item.quantity ?? 0),
+            0,
+        ) +
+        (order.addOns ?? []).reduce(
+            (sum, item) => sum + (item.quantity ?? 0),
+            0,
+        );
+
+    res.status(200).json({
+        success: true,
+        message: "Order tracked successfully",
+        data: {
+            orderNumber: order.orderNumber,
+            orderStatus: order.orderStatus,
+            paymentStatus: order.paymentStatus,
+            paymentMethod: order.paymentMethod,
+            createdAt: order.createdAt,
+            deliveredAt: order.deliveredAt,
+            cancelledAt: order.cancelledAt,
+            cancellationReason: order.cancellationReason,
+            statusHistory: order.statusHistory,
+            itemCount,
+            totalQuantity,
+        },
+    });
+});
+
 export const cancelMyOrder = asyncHandler(async (req, res) => {
     const { id } = req.params;
 
