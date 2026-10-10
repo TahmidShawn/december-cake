@@ -10,6 +10,7 @@ import {
 import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { Link, useNavigate } from "react-router";
+import { GoogleLogin } from "@react-oauth/google";
 import { z } from "zod";
 
 import { Button } from "@/components/ui/button";
@@ -49,6 +50,16 @@ const Login = () => {
         url: "/auth/login",
     });
 
+    const {
+        mutate: googleLogin,
+        isPending: isGooglePending,
+        error: googleError,
+    } = usePost({
+        url: "/auth/google",
+    });
+
+    const isPending = isLoggingIn || isGooglePending;
+
     const handleLogin = (formData) => {
         loginUser(formData, {
             onSuccess: async () => {
@@ -57,6 +68,29 @@ const Login = () => {
                 navigate("/");
             },
         });
+    };
+
+    const handleGoogleSuccess = (credentialResponse) => {
+        if (!credentialResponse.credential) {
+            return;
+        }
+
+        googleLogin(
+            {
+                credential: credentialResponse.credential,
+            },
+            {
+                onSuccess: async () => {
+                    await refreshUser();
+
+                    navigate("/");
+                },
+            },
+        );
+    };
+
+    const handleGoogleError = () => {
+        console.error("Google Sign-In failed");
     };
 
     return (
@@ -101,9 +135,43 @@ const Login = () => {
                             </p>
                         </div>
 
+                        {/* Google Login */}
+                        <div className="space-y-4">
+                            <div className="w-full">
+                                <GoogleLogin
+                                    onSuccess={handleGoogleSuccess}
+                                    onError={handleGoogleError}
+                                    useOneTap={false}
+                                    theme="outline"
+                                    size="large"
+                                    text="continue_with"
+                                    shape="rectangular"
+                                    width="full"
+                                    disabled={isPending}
+                                />
+                            </div>
+
+                            {googleError && (
+                                <p className="text-center text-sm text-destructive">
+                                    {googleError?.response?.data?.message ||
+                                        "Unable to continue with Google. Please try again."}
+                                </p>
+                            )}
+
+                            <div className="flex items-center gap-4">
+                                <div className="h-px flex-1 bg-border" />
+
+                                <span className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                                    Or continue with email
+                                </span>
+
+                                <div className="h-px flex-1 bg-border" />
+                            </div>
+                        </div>
+
                         {/* Form */}
                         <form
-                            className="space-y-5"
+                            className="mt-5 space-y-5"
                             onSubmit={handleSubmit(handleLogin)}
                             noValidate
                         >
@@ -124,7 +192,7 @@ const Login = () => {
                                         type="email"
                                         placeholder="Enter your email"
                                         autoComplete="email"
-                                        disabled={isLoggingIn}
+                                        disabled={isPending}
                                         className="h-11 pl-10"
                                         {...register("email")}
                                     />
@@ -165,14 +233,14 @@ const Login = () => {
                                         }
                                         placeholder="Enter your password"
                                         autoComplete="current-password"
-                                        disabled={isLoggingIn}
+                                        disabled={isPending}
                                         className="h-11 px-10"
                                         {...register("password")}
                                     />
 
                                     <button
                                         type="button"
-                                        disabled={isLoggingIn}
+                                        disabled={isPending}
                                         onClick={() =>
                                             setShowPassword((prev) => !prev)
                                         }
@@ -211,7 +279,7 @@ const Login = () => {
                                 type="submit"
                                 variant="asymmetric"
                                 size="lg"
-                                disabled={isLoggingIn}
+                                disabled={isPending}
                                 className="group/button h-auto w-full gap-2 px-6 py-2 text-sm font-semibold"
                             >
                                 {isLoggingIn ? "Signing in..." : "Sign in"}
@@ -257,7 +325,6 @@ const Login = () => {
                         >
                             <Link to="/" className="flex items-center gap-2">
                                 Home
-
                                 <span className="flex size-6 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground transition-transform duration-300 group-hover/button:-rotate-45">
                                     <ArrowLeft className="size-3.5" />
                                 </span>

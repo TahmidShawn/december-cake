@@ -180,5 +180,18 @@
 
     html {
         @apply font-sans;
+        scroll-behavior: smooth;
+        /* Offset anchor jumps for the fixed navbar */
+        scroll-padding-top: 5.5rem;
+    }
+
+    /* Hide horizontal scrollbars on carousels while keeping scroll */
+    .no-scrollbar {
+        scrollbar-width: none;
+        -ms-overflow-style: none;
+    }
+
+    .no-scrollbar::-webkit-scrollbar {
+        display: none;
     }
 }

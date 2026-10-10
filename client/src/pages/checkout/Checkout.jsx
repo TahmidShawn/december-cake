@@ -1,4 +1,5 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
+import { useLocation, useNavigate } from "react-router";
 import {
     Check,
     ChevronRight,
@@ -6,8 +7,10 @@ import {
     MapPin,
     Pencil,
     ShoppingBag,
+    Sparkles,
     Wallet,
 } from "lucide-react";
+import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -27,64 +30,9 @@ import {
 } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
 
-const demoSavedAddress = {
-    fullName: "Tahmid Shawn",
-    phone: "+96550123456",
-    governorate: "Hawalli",
-    area: "Salmiya",
-    block: "10",
-    street: "Salem Al Mubarak Street",
-    building: "25",
-    floor: "3",
-    apartmentNo: "12",
-    notes: "Please call before delivery.",
-};
-
-const demoOrderItems = [
-    {
-        id: "cake-001",
-        name: {
-            en: "Classic Chocolate Celebration Cake",
-            ar: "كعكة الشوكولاتة الكلاسيكية للاحتفال",
-        },
-        imageUrl:
-            "https://images.unsplash.com/photo-1571115177098-24ec42ed204d?w=300&auto=format&fit=crop&q=80",
-        price: 10.625,
-        quantity: 1,
-    },
-    {
-        id: "cake-002",
-        name: {
-            en: "Strawberry Cream Cake",
-            ar: "كعكة الفراولة بالكريمة",
-        },
-        imageUrl:
-            "https://images.unsplash.com/photo-1578985545062-69928b1d9587?w=300&auto=format&fit=crop&q=80",
-        price: 8.5,
-        quantity: 1,
-    },
-];
-
-const demoAddOns = [
-    {
-        id: "addon-001",
-        name: {
-            en: "Birthday Candles",
-            ar: "شموع عيد الميلاد",
-        },
-        price: 0.5,
-        quantity: 2,
-    },
-    {
-        id: "addon-002",
-        name: {
-            en: "Greeting Card",
-            ar: "بطاقة تهنئة",
-        },
-        price: 0.75,
-        quantity: 1,
-    },
-];
+import useGet from "@/hooks/useGet";
+import usePost from "@/hooks/usePost";
+import { useLanguage } from "@/context/LanguageContext";
 
 const governorates = [
     "Al Asimah",
@@ -95,29 +43,190 @@ const governorates = [
     "Jahra",
 ];
 
-const formatPrice = (price) => `${price.toFixed(3)} KWD`;
+// Keep these in sync with the backend validation schema
+const FIELD_LIMITS = {
+    fullNameMin: 4,
+    fullName: 30,
+    area: 100,
+    block: 50,
+    street: 150,
+    building: 50,
+    floor: 50,
+    apartmentNo: 50,
+    notes: 300,
+};
+
+const formatPrice = (price) => `${Number(price).toFixed(3)} KWD`;
+
+/*
+ * Extracts the (up to) 8 local digits from whatever the user typed or pasted:
+ * "+965 9123 4567", "00965 91234567", "965-9123-4567", "9123 4567" ...
+ */
+const extractKuwaitLocalNumber = (phone = "") => {
+    let digits = String(phone).replace(/\D/g, "");
+
+    if (digits.startsWith("00965")) {
+        digits = digits.slice(5);
+    } else if (digits.startsWith("965") && digits.length > 8) {
+        digits = digits.slice(3);
+    }
+
+    return digits.slice(0, 8);
+};
+
+// Final format sent to the backend: +965XXXXXXXX
+const normalizeKuwaitPhone = (phone = "") => {
+    const local = extractKuwaitLocalNumber(phone);
+
+    return local ? `+965${local}` : "";
+};
+
+const isValidKuwaitPhone = (phone = "") => {
+    return /^[2-9]\d{7}$/.test(extractKuwaitLocalNumber(phone));
+};
+
+// Pretty display: +965 9123 4567
+const formatKuwaitPhoneForDisplay = (phone = "") => {
+    const local = extractKuwaitLocalNumber(phone);
+
+    if (local.length !== 8) {
+        return phone;
+    }
+
+    return `+965 ${local.slice(0, 4)} ${local.slice(4)}`;
+};
 
 const Checkout = () => {
-    const [savedAddress, setSavedAddress] = useState(demoSavedAddress);
-    const [address, setAddress] = useState(demoSavedAddress);
+    const { language } = useLanguage();
+    const location = useLocation();
+    const navigate = useNavigate();
+
+    const selectedCakeIds = location.state?.cakeIds ?? [];
+
+    const [savedAddress, setSavedAddress] = useState(null);
+    const [address, setAddress] = useState({
+        phone: "",
+    });
     const [isAddressModalOpen, setIsAddressModalOpen] = useState(false);
     const [paymentMethod, setPaymentMethod] = useState(null);
     const [orderPlaced, setOrderPlaced] = useState(false);
+    const [placedOrder, setPlacedOrder] = useState(null);
 
-    const cakesTotal = demoOrderItems.reduce(
-        (total, item) => total + item.price * item.quantity,
+    const {
+        data: cartResponse,
+        isLoading: isCartLoading,
+        isError: isCartError,
+    } = useGet({
+        url: "/cart",
+        queryKey: ["cart"],
+        retry: false,
+        enabled: selectedCakeIds.length > 0,
+    });
+
+    const { mutate: createOrder, isPending: isCreatingOrder } = usePost({
+        url: "/order",
+    });
+
+    const { mutate: createPayment, isPending: isCreatingPayment } = usePost({
+        url: "/payments",
+    });
+
+    const orderItems = useMemo(() => {
+        const cartItems = cartResponse?.data?.items ?? [];
+
+        return cartItems
+            .filter((item) => {
+                const cakeId =
+                    typeof item.cake === "object" ? item.cake?._id : item.cake;
+
+                return selectedCakeIds.includes(cakeId);
+            })
+            .map((item) => {
+                const cake = item.cake;
+
+                if (!cake || typeof cake !== "object") {
+                    return null;
+                }
+
+                const imageUrl =
+                    typeof cake.images?.[0] === "string"
+                        ? cake.images[0]
+                        : cake.images?.[0]?.url;
+
+                const originalPrice = Number(cake.price ?? 0);
+
+                const discountedPrice =
+                    cake.discountedPrice !== undefined
+                        ? Number(cake.discountedPrice)
+                        : originalPrice;
+
+                return {
+                    id: cake._id,
+                    name: cake.name,
+                    imageUrl,
+                    price: originalPrice,
+                    discountedPrice,
+                    quantity: item.quantity,
+                };
+            })
+            .filter(Boolean);
+    }, [cartResponse, selectedCakeIds]);
+
+    const orderAddOns = useMemo(() => {
+        const cartAddOns = cartResponse?.data?.addOns ?? [];
+
+        return cartAddOns
+            .map((item) => {
+                const addOn = item.addOn;
+
+                if (!addOn || typeof addOn !== "object") {
+                    return null;
+                }
+
+                return {
+                    id: addOn._id,
+                    name: addOn.name,
+                    imageUrl: addOn.imageUrl,
+                    price: Number(addOn.price ?? 0),
+                    quantity: item.quantity,
+                };
+            })
+            .filter(Boolean);
+    }, [cartResponse]);
+
+    const cakesTotal = orderItems.reduce(
+        (total, item) => total + item.discountedPrice * item.quantity,
         0,
     );
 
-    const addOnsTotal = demoAddOns.reduce(
+    const addOnsTotal = orderAddOns.reduce(
         (total, item) => total + item.price * item.quantity,
         0,
     );
 
     const subtotal = cakesTotal + addOnsTotal;
-    const discount = 0;
-    const deliveryFee = subtotal >= 15 ? 0 : 1.5;
-    const totalPrice = subtotal - discount + deliveryFee;
+
+    const cakesCount = orderItems.reduce(
+        (total, item) => total + item.quantity,
+        0,
+    );
+
+    const addOnsCount = orderAddOns.reduce(
+        (total, item) => total + item.quantity,
+        0,
+    );
+
+    const itemsCount = cakesCount + addOnsCount;
+
+    const deliveryFee = 0;
+
+    const discount = orderItems.reduce(
+        (total, item) =>
+            total + (item.price - item.discountedPrice) * item.quantity,
+        0,
+    );
+
+    const totalPrice = subtotal + deliveryFee;
 
     const updateAddress = (field, value) => {
         setAddress((previous) => ({
@@ -127,52 +236,225 @@ const Checkout = () => {
     };
 
     const handleOpenAddressModal = () => {
-        setAddress(savedAddress || {});
+        setAddress(
+            savedAddress
+                ? {
+                      ...savedAddress,
+                      // Show only the 8 local digits inside the modal
+                      phone: extractKuwaitLocalNumber(savedAddress.phone),
+                  }
+                : {
+                      phone: "",
+                  },
+        );
+
         setIsAddressModalOpen(true);
     };
 
     const handleSaveAddress = () => {
-        setSavedAddress(address);
+        const fullName = address.fullName?.trim();
+        const localPhone = extractKuwaitLocalNumber(address.phone);
+        const area = address.area?.trim();
+        const block = address.block?.trim();
+        const street = address.street?.trim();
+        const building = address.building?.trim();
+        const floor = address.floor?.trim();
+        const apartmentNo = address.apartmentNo?.trim();
+        const notes = address.notes?.trim();
+
+        if (!fullName) {
+            toast.error("Please enter your full name.");
+            return;
+        }
+
+        if (fullName.length < FIELD_LIMITS.fullNameMin) {
+            toast.error(
+                `Full name must be at least ${FIELD_LIMITS.fullNameMin} characters.`,
+            );
+            return;
+        }
+
+        if (fullName.length > FIELD_LIMITS.fullName) {
+            toast.error(
+                `Full name cannot exceed ${FIELD_LIMITS.fullName} characters.`,
+            );
+            return;
+        }
+
+        if (!localPhone) {
+            toast.error("Please enter your phone number.");
+            return;
+        }
+
+        if (!isValidKuwaitPhone(localPhone)) {
+            toast.error("Please enter a valid 8-digit Kuwait phone number.");
+            return;
+        }
+
+        if (!address.governorate) {
+            toast.error("Please select your governorate.");
+            return;
+        }
+
+        if (!area) {
+            toast.error("Please enter your area.");
+            return;
+        }
+
+        if (!block) {
+            toast.error("Please enter your block.");
+            return;
+        }
+
+        if (!street) {
+            toast.error("Please enter your street.");
+            return;
+        }
+
+        if (!building) {
+            toast.error("Please enter your building number.");
+            return;
+        }
+
+        setSavedAddress({
+            fullName,
+            phone: normalizeKuwaitPhone(localPhone),
+            governorate: address.governorate,
+            area,
+            block,
+            street,
+            building,
+            ...(floor ? { floor } : {}),
+            ...(apartmentNo ? { apartmentNo } : {}),
+            ...(notes ? { notes } : {}),
+        });
+
         setIsAddressModalOpen(false);
     };
 
     const handlePlaceOrder = () => {
-        if (!savedAddress || !paymentMethod) {
+        if (!savedAddress) {
+            toast.error("Please add a delivery address.");
             return;
         }
 
-        const orderPayload = {
+        if (!paymentMethod) {
+            toast.error("Please select a payment method.");
+            return;
+        }
+
+        if (!selectedCakeIds.length) {
+            toast.error("No cakes selected for checkout.");
+            navigate("/cart");
+            return;
+        }
+
+        const payload = {
+            cakeIds: selectedCakeIds,
+            addOns: orderAddOns.map((item) => ({
+                addOnId: item.id,
+                quantity: item.quantity,
+            })),
             shippingAddress: savedAddress,
-
-            items: demoOrderItems.map((item) => ({
-                cake: item.id,
-                name: item.name,
-                imageUrl: item.imageUrl,
-                price: item.price,
-                quantity: item.quantity,
-                totalPrice: item.price * item.quantity,
-            })),
-
-            addOns: demoAddOns.map((item) => ({
-                addOn: item.id,
-                name: item.name,
-                price: item.price,
-                quantity: item.quantity,
-                totalPrice: item.price * item.quantity,
-            })),
-
             paymentMethod,
-            paymentStatus: "pending",
-            subtotal,
-            discount,
-            deliveryFee,
-            totalPrice,
         };
 
-        console.log("Demo order payload:", orderPayload);
+        createOrder(payload, {
+            onSuccess: (response) => {
+                const order = response?.data;
 
-        setOrderPlaced(true);
+                if (!order?._id) {
+                    toast.error(
+                        "Order was created, but the order ID is missing.",
+                    );
+                    return;
+                }
+
+                if (paymentMethod === "cash_on_delivery") {
+                    setPlacedOrder(order);
+                    setOrderPlaced(true);
+
+                    toast.success(
+                        response?.message || "Order placed successfully.",
+                    );
+
+                    return;
+                }
+
+                createPayment(
+                    {
+                        orderId: order._id,
+                    },
+                    {
+                        onSuccess: (paymentResponse) => {
+                            const paymentUrl =
+                                paymentResponse?.data?.paymentUrl;
+
+                            if (!paymentUrl) {
+                                toast.error(
+                                    "Payment was created, but the payment URL is missing.",
+                                );
+                                return;
+                            }
+
+                            window.location.href = paymentUrl;
+                        },
+
+                        onError: (error) => {
+                            const message =
+                                error?.response?.data?.message ||
+                                "Unable to initialize payment. Please try again.";
+
+                            toast.error(message);
+                        },
+                    },
+                );
+            },
+
+            onError: (error) => {
+                const message =
+                    error?.response?.data?.message ||
+                    "Unable to place your order. Please try again.";
+
+                toast.error(message);
+            },
+        });
     };
+
+    if (!selectedCakeIds.length) {
+        return (
+            <main className="wrapper py-10 md:py-14">
+                <div className="mx-auto max-w-2xl border border-border bg-card p-8 text-center md:p-12">
+                    <div className="mx-auto mb-5 flex size-16 items-center justify-center rounded-full bg-primary/10 text-primary">
+                        <ShoppingBag className="size-8" />
+                    </div>
+
+                    <p className="mb-2 text-sm font-semibold tracking-wider text-primary uppercase">
+                        Checkout
+                    </p>
+
+                    <h1 className="text-3xl font-bold tracking-tight md:text-4xl">
+                        No items selected
+                    </h1>
+
+                    <p className="mx-auto mt-4 max-w-lg text-muted-foreground">
+                        Please select at least one cake from your cart before
+                        continuing to checkout.
+                    </p>
+
+                    <Button
+                        variant="asymmetric"
+                        size="lg"
+                        className="mt-8"
+                        onClick={() => navigate("/cart")}
+                    >
+                        Back to cart
+                        <ChevronRight className="size-4" />
+                    </Button>
+                </div>
+            </main>
+        );
+    }
 
     if (orderPlaced) {
         return (
@@ -191,22 +473,37 @@ const Checkout = () => {
                     </h1>
 
                     <p className="mx-auto mt-4 max-w-lg text-muted-foreground">
-                        Your demo order has been created successfully. The real
-                        backend will create the order and continue with the
-                        selected payment flow.
+                        Your order has been created successfully. We will
+                        continue with your selected payment and delivery flow.
                     </p>
+
+                    {placedOrder?.orderNumber && (
+                        <div className="mt-6 border border-border bg-background p-4">
+                            <p className="text-xs text-muted-foreground">
+                                Order number
+                            </p>
+
+                            <p className="mt-1 font-semibold">
+                                {placedOrder.orderNumber}
+                            </p>
+                        </div>
+                    )}
 
                     <div className="mt-8 flex flex-col justify-center gap-3 md:flex-row">
                         <Button
                             variant="asymmetric"
                             size="lg"
-                            onClick={() => setOrderPlaced(false)}
+                            onClick={() => navigate("/")}
                         >
-                            Back to checkout
+                            Continue shopping
                         </Button>
 
-                        <Button variant="outline-asymmetric" size="lg">
-                            View order
+                        <Button
+                            variant="outline-asymmetric"
+                            size="lg"
+                            onClick={() => navigate("/orders")}
+                        >
+                            View orders
                             <ChevronRight className="size-4" />
                         </Button>
                     </div>
@@ -214,6 +511,20 @@ const Checkout = () => {
             </main>
         );
     }
+
+    const isLoading = isCartLoading;
+    const hasError = isCartError;
+
+    const hasMissingSelectedCake =
+        !isCartLoading && orderItems.length !== selectedCakeIds.length;
+
+    const isCheckoutReady =
+        !isLoading &&
+        !hasError &&
+        !hasMissingSelectedCake &&
+        orderItems.length > 0;
+
+    const isProcessingOrder = isCreatingOrder || isCreatingPayment;
 
     return (
         <main className="wrapper py-6 md:py-10">
@@ -246,7 +557,6 @@ const Checkout = () => {
 
             <div className="grid items-start gap-6 xl:grid-cols-[minmax(0,1fr)_380px]">
                 <div className="space-y-6">
-                    {/* Delivery Address */}
                     <section className="border border-border bg-card p-5 md:p-6">
                         <SectionHeader
                             number="01"
@@ -286,7 +596,6 @@ const Checkout = () => {
                         )}
                     </section>
 
-                    {/* Payment */}
                     <section className="border border-border bg-card p-5 md:p-6">
                         <SectionHeader
                             number="02"
@@ -307,9 +616,7 @@ const Checkout = () => {
 
                             <PaymentCard
                                 value="cash_on_delivery"
-                                selected={
-                                    paymentMethod === "cash_on_delivery"
-                                }
+                                selected={paymentMethod === "cash_on_delivery"}
                                 onSelect={setPaymentMethod}
                                 icon={Wallet}
                                 title="Cash on delivery"
@@ -325,7 +632,6 @@ const Checkout = () => {
                         )}
                     </section>
 
-                    {/* Order Review */}
                     <section className="border border-border bg-card p-5 md:p-6">
                         <SectionHeader
                             number="03"
@@ -334,147 +640,270 @@ const Checkout = () => {
                             description="Check your cakes and extras before placing the order."
                         />
 
-                        <div className="space-y-3">
-                            {demoOrderItems.map((item) => (
-                                <OrderItem
-                                    key={item.id}
-                                    imageUrl={item.imageUrl}
-                                    name={item.name.en}
-                                    quantity={item.quantity}
-                                    price={item.price}
-                                />
-                            ))}
-                        </div>
-
-                        {demoAddOns.length > 0 && (
-                            <div className="mt-6 border-t border-border pt-5">
-                                <div className="mb-3 flex items-center justify-between">
-                                    <h3 className="font-semibold">
-                                        Add-ons
-                                    </h3>
-
-                                    <span className="text-xs text-muted-foreground">
-                                        {demoAddOns.length} extras
-                                    </span>
-                                </div>
-
+                        {isLoading ? (
+                            <p className="text-sm text-muted-foreground">
+                                Loading your selected items...
+                            </p>
+                        ) : hasError ? (
+                            <p className="text-sm text-destructive">
+                                Unable to load your selected items. Please go
+                                back to your cart and try again.
+                            </p>
+                        ) : (
+                            <>
                                 <div className="space-y-3">
-                                    {demoAddOns.map((item) => (
+                                    {orderItems.map((item) => (
                                         <OrderItem
                                             key={item.id}
-                                            name={item.name.en}
+                                            imageUrl={item.imageUrl}
+                                            name={
+                                                item.name?.[language] ??
+                                                item.name?.en
+                                            }
                                             quantity={item.quantity}
-                                            price={item.price}
-                                            compact
+                                            price={item.discountedPrice}
+                                            originalPrice={item.price}
                                         />
                                     ))}
                                 </div>
-                            </div>
+
+                                {orderAddOns.length > 0 && (
+                                    <div className="mt-6 border-t border-border pt-5">
+                                        <div className="mb-3 flex items-center justify-between">
+                                            <h3 className="font-semibold">
+                                                Add-ons
+                                            </h3>
+
+                                            <span className="text-xs text-muted-foreground">
+                                                {orderAddOns.length} extras
+                                            </span>
+                                        </div>
+
+                                        <div className="space-y-3">
+                                            {orderAddOns.map((item) => (
+                                                <OrderItem
+                                                    key={item.id}
+                                                    imageUrl={item.imageUrl}
+                                                    name={
+                                                        item.name?.[language] ??
+                                                        item.name?.en
+                                                    }
+                                                    quantity={item.quantity}
+                                                    price={item.price}
+                                                    compact
+                                                />
+                                            ))}
+                                        </div>
+                                    </div>
+                                )}
+                            </>
                         )}
                     </section>
                 </div>
 
-                {/* Summary */}
                 <aside className="xl:sticky xl:top-24">
-                    <div className="border border-border bg-card p-5 md:p-6">
-                        <div className="mb-6">
-                            <p className="text-sm font-semibold tracking-wider text-primary uppercase">
-                                Your order
-                            </p>
-
-                            <h2 className="mt-1 text-xl font-bold">
+                    <div className="overflow-hidden border border-border bg-card">
+                        <div className="flex items-center justify-between gap-3 border-b border-border bg-secondary/40 px-5 py-4 md:px-6">
+                            <h2 className="text-lg font-black tracking-tight">
                                 Order summary
                             </h2>
+
+                            {itemsCount > 0 && (
+                                <span className="rounded-full bg-primary px-2.5 py-1 text-[11px] font-bold text-primary-foreground">
+                                    {itemsCount}{" "}
+                                    {itemsCount === 1 ? "item" : "items"}
+                                </span>
+                            )}
                         </div>
 
-                        <div className="space-y-4">
-                            {demoOrderItems.map((item) => (
-                                <SummaryItem
-                                    key={item.id}
-                                    name={item.name.en}
-                                    quantity={item.quantity}
-                                    price={item.price}
-                                />
-                            ))}
+                        <div className="p-5 md:p-6">
+                            {itemsCount === 0 ? (
+                                <div className="py-6 text-center">
+                                    <ShoppingBag className="mx-auto size-8 text-muted-foreground" />
 
-                            {demoAddOns.map((item) => (
-                                <SummaryItem
-                                    key={item.id}
-                                    name={item.name.en}
-                                    quantity={item.quantity}
-                                    price={item.price}
-                                />
-                            ))}
-                        </div>
+                                    <p className="mt-3 text-sm font-semibold">
+                                        No items to show yet
+                                    </p>
 
-                        <div className="my-5 border-t border-border" />
+                                    <p className="mt-1 text-xs text-muted-foreground">
+                                        Your price breakdown will appear here.
+                                    </p>
+                                </div>
+                            ) : (
+                                <>
+                                    <div className="space-y-4 pe-1">
+                                        {orderItems.length > 0 && (
+                                            <div>
+                                                <p className="mb-2 text-[11px] font-bold uppercase tracking-[0.12em] text-muted-foreground">
+                                                    Cakes
+                                                </p>
 
-                        <div className="space-y-3">
-                            <SummaryRow
-                                label="Subtotal"
-                                value={formatPrice(subtotal)}
-                            />
+                                                <div className="space-y-2">
+                                                    {orderItems.map((item) => (
+                                                        <SummaryItem
+                                                            key={item.id}
+                                                            image={
+                                                                item.imageUrl
+                                                            }
+                                                            name={
+                                                                item.name?.[
+                                                                    language
+                                                                ] ??
+                                                                item.name?.en
+                                                            }
+                                                            quantity={
+                                                                item.quantity
+                                                            }
+                                                            unitPrice={
+                                                                item.discountedPrice
+                                                            }
+                                                            originalPrice={
+                                                                item.price
+                                                            }
+                                                            lineTotal={
+                                                                item.discountedPrice *
+                                                                item.quantity
+                                                            }
+                                                        />
+                                                    ))}
+                                                </div>
+                                            </div>
+                                        )}
 
-                            <SummaryRow
-                                label="Discount"
-                                value={
-                                    discount > 0
-                                        ? `-${formatPrice(discount)}`
-                                        : formatPrice(0)
-                                }
-                            />
+                                        {orderAddOns.length > 0 && (
+                                            <div>
+                                                <p className="mb-2 text-[11px] font-bold uppercase tracking-[0.12em] text-muted-foreground">
+                                                    Add-ons
+                                                </p>
 
-                            <SummaryRow
-                                label="Delivery"
-                                value={
-                                    deliveryFee === 0
-                                        ? "Free"
-                                        : formatPrice(deliveryFee)
-                                }
-                            />
-                        </div>
+                                                <div className="space-y-2">
+                                                    {orderAddOns.map((item) => (
+                                                        <SummaryItem
+                                                            key={item.id}
+                                                            image={
+                                                                item.imageUrl
+                                                            }
+                                                            name={
+                                                                item.name?.[
+                                                                    language
+                                                                ] ??
+                                                                item.name?.en
+                                                            }
+                                                            quantity={
+                                                                item.quantity
+                                                            }
+                                                            unitPrice={
+                                                                item.price
+                                                            }
+                                                            lineTotal={
+                                                                item.price *
+                                                                item.quantity
+                                                            }
+                                                        />
+                                                    ))}
+                                                </div>
+                                            </div>
+                                        )}
+                                    </div>
 
-                        <div className="my-5 border-t border-border" />
+                                    <div className="my-5 border-t border-dashed border-border" />
 
-                        <div className="flex items-end justify-between gap-4">
-                            <div>
-                                <p className="text-sm text-muted-foreground">
-                                    Total
-                                </p>
+                                    <div className="space-y-3 text-sm">
+                                        {orderItems.length > 0 && (
+                                            <SummaryRow
+                                                label="Cakes"
+                                                hint={`${cakesCount} pcs`}
+                                                value={cakesTotal}
+                                            />
+                                        )}
 
-                                <p className="mt-1 text-2xl font-bold">
+                                        {orderAddOns.length > 0 && (
+                                            <SummaryRow
+                                                label="Add-ons"
+                                                hint={`${addOnsCount} pcs`}
+                                                value={addOnsTotal}
+                                            />
+                                        )}
+
+                                        <SummaryRow
+                                            label="Delivery"
+                                            value={deliveryFee}
+                                            free={deliveryFee === 0}
+                                        />
+                                    </div>
+
+                                    {discount > 0 && (
+                                        <div className="mt-4 flex items-center justify-between gap-3 border border-primary/20 bg-primary/10 px-3 py-2.5">
+                                            <div className="flex items-center gap-2 text-xs font-bold text-primary">
+                                                <Sparkles className="size-4" />
+                                                Total savings
+                                            </div>
+
+                                            <span className="text-sm font-black text-primary">
+                                                {formatPrice(discount)}
+                                            </span>
+                                        </div>
+                                    )}
+
+                                    {deliveryFee === 0 && (
+                                        <p className="mt-3 flex items-center gap-1.5 text-xs font-semibold text-primary">
+                                            <Check className="size-3.5" />
+                                            You've unlocked free delivery.
+                                        </p>
+                                    )}
+                                </>
+                            )}
+
+                            <div className="my-5 border-t border-border" />
+
+                            <div className="flex items-end justify-between gap-4">
+                                <div>
+                                    <p className="text-sm font-bold">Total</p>
+
+                                    <p className="mt-0.5 text-[11px] text-muted-foreground">
+                                        Including delivery
+                                    </p>
+                                </div>
+
+                                <span className="text-2xl font-black tracking-tight text-primary">
                                     {formatPrice(totalPrice)}
-                                </p>
+                                </span>
                             </div>
 
-                            <span className="text-xs text-muted-foreground">
-                                KWD
-                            </span>
+                            <Button
+                                variant="asymmetric"
+                                size="lg"
+                                className="mt-6 h-11 w-full text-sm"
+                                disabled={
+                                    !savedAddress ||
+                                    !paymentMethod ||
+                                    !isCheckoutReady ||
+                                    isProcessingOrder
+                                }
+                                onClick={handlePlaceOrder}
+                            >
+                                {isCreatingOrder
+                                    ? "Creating order..."
+                                    : isCreatingPayment
+                                      ? "Redirecting to payment..."
+                                      : paymentMethod === "online"
+                                        ? "Continue to payment"
+                                        : "Place order"}
+
+                                {!isProcessingOrder && (
+                                    <ChevronRight className="size-4" />
+                                )}
+                            </Button>
+
+                            <p className="mt-3 text-center text-xs leading-relaxed text-muted-foreground">
+                                By placing your order, you agree to our terms
+                                and delivery policy.
+                            </p>
                         </div>
-
-                        <Button
-                            variant="asymmetric"
-                            size="lg"
-                            className="mt-6 h-11 w-full text-sm"
-                            disabled={!savedAddress || !paymentMethod}
-                            onClick={handlePlaceOrder}
-                        >
-                            {paymentMethod === "online"
-                                ? "Continue to payment"
-                                : "Place order"}
-
-                            <ChevronRight className="size-4" />
-                        </Button>
-
-                        <p className="mt-3 text-center text-xs leading-relaxed text-muted-foreground">
-                            By placing your order, you agree to our terms and
-                            delivery policy.
-                        </p>
                     </div>
                 </aside>
             </div>
 
-            {/* Address Modal */}
             <AddressModal
                 open={isAddressModalOpen}
                 onOpenChange={setIsAddressModalOpen}
@@ -488,12 +917,7 @@ const Checkout = () => {
     );
 };
 
-const SectionHeader = ({
-    number,
-    icon: Icon,
-    title,
-    description,
-}) => {
+const SectionHeader = ({ number, icon: Icon, title, description }) => {
     return (
         <div className="mb-6 flex gap-3">
             <div className="flex size-9 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary">
@@ -539,7 +963,7 @@ const SavedAddress = ({ address, onEdit }) => {
                             dir="ltr"
                             className="text-left text-muted-foreground"
                         >
-                            {address.phone}
+                            {formatKuwaitPhoneForDisplay(address.phone)}
                         </p>
 
                         <p className="leading-relaxed text-muted-foreground">
@@ -587,7 +1011,7 @@ const AddressModal = ({
 }) => {
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
-            <DialogContent className="w-[calc(100%-2rem)] !max-w-3xl max-h-[90vh] overflow-y-auto p-5 md:p-6">
+            <DialogContent className="max-h-[90vh] w-[calc(100%-2rem)] !max-w-3xl overflow-y-auto p-5 md:p-6">
                 <DialogHeader className="text-left">
                     <DialogTitle className="text-xl">
                         {hasSavedAddress
@@ -611,19 +1035,36 @@ const AddressModal = ({
                                     onChange("fullName", event.target.value)
                                 }
                                 placeholder="Enter your full name"
+                                maxLength={FIELD_LIMITS.fullName}
                             />
                         </FormField>
 
                         <FormField label="Phone number" required>
-                            <Input
+                            <div
                                 dir="ltr"
-                                className="text-left"
-                                value={address.phone || ""}
-                                onChange={(event) =>
-                                    onChange("phone", event.target.value)
-                                }
-                                placeholder="+965 5XXXXXXX"
-                            />
+                                className="flex items-stretch overflow-hidden border border-input bg-background focus-within:ring-1 focus-within:ring-ring"
+                            >
+                                <span className="flex items-center border-r border-input bg-muted px-3 text-sm font-medium text-muted-foreground">
+                                    +965
+                                </span>
+
+                                <Input
+                                    type="tel"
+                                    inputMode="numeric"
+                                    autoComplete="tel-national"
+                                    className="border-0 text-left shadow-none focus-visible:ring-0"
+                                    value={address.phone || ""}
+                                    onChange={(event) =>
+                                        onChange(
+                                            "phone",
+                                            extractKuwaitLocalNumber(
+                                                event.target.value,
+                                            ),
+                                        )
+                                    }
+                                    placeholder="9123 4567"
+                                />
+                            </div>
                         </FormField>
 
                         <FormField label="Governorate" required>
@@ -657,6 +1098,7 @@ const AddressModal = ({
                                     onChange("area", event.target.value)
                                 }
                                 placeholder="e.g. Salmiya"
+                                maxLength={FIELD_LIMITS.area}
                             />
                         </FormField>
 
@@ -667,6 +1109,7 @@ const AddressModal = ({
                                     onChange("block", event.target.value)
                                 }
                                 placeholder="Block number"
+                                maxLength={FIELD_LIMITS.block}
                             />
                         </FormField>
 
@@ -677,6 +1120,7 @@ const AddressModal = ({
                                     onChange("street", event.target.value)
                                 }
                                 placeholder="Street name"
+                                maxLength={FIELD_LIMITS.street}
                             />
                         </FormField>
 
@@ -687,6 +1131,7 @@ const AddressModal = ({
                                     onChange("building", event.target.value)
                                 }
                                 placeholder="Building number"
+                                maxLength={FIELD_LIMITS.building}
                             />
                         </FormField>
 
@@ -697,6 +1142,7 @@ const AddressModal = ({
                                     onChange("floor", event.target.value)
                                 }
                                 placeholder="Optional"
+                                maxLength={FIELD_LIMITS.floor}
                             />
                         </FormField>
 
@@ -707,6 +1153,7 @@ const AddressModal = ({
                                     onChange("apartmentNo", event.target.value)
                                 }
                                 placeholder="Optional"
+                                maxLength={FIELD_LIMITS.apartmentNo}
                             />
                         </FormField>
                     </div>
@@ -719,7 +1166,7 @@ const AddressModal = ({
                             }
                             placeholder="Any instructions for the delivery driver?"
                             className="min-h-24 resize-none"
-                            maxLength={300}
+                            maxLength={FIELD_LIMITS.notes}
                         />
                     </FormField>
 
@@ -753,9 +1200,7 @@ const FormField = ({ label, required, children }) => {
             <label className="text-sm font-medium">
                 {label}
 
-                {required && (
-                    <span className="ml-1 text-destructive">*</span>
-                )}
+                {required && <span className="ml-1 text-destructive">*</span>}
             </label>
 
             {children}
@@ -817,8 +1262,12 @@ const OrderItem = ({
     name,
     quantity,
     price,
+    originalPrice,
     compact = false,
 }) => {
+    const hasDiscount =
+        originalPrice !== undefined && Number(originalPrice) > Number(price);
+
     return (
         <div className="flex items-center gap-3 border border-border bg-background p-3">
             {imageUrl && (
@@ -834,9 +1283,17 @@ const OrderItem = ({
             <div className="min-w-0 flex-1">
                 <p className="truncate text-sm font-semibold">{name}</p>
 
-                <p className="mt-1 text-xs text-muted-foreground">
-                    {quantity} × {formatPrice(price)}
-                </p>
+                <div className="mt-1 flex flex-wrap items-center gap-2 text-xs">
+                    <span className="text-muted-foreground">{quantity} ×</span>
+
+                    <span className="font-medium">{formatPrice(price)}</span>
+
+                    {hasDiscount && (
+                        <span className="text-muted-foreground line-through">
+                            {formatPrice(originalPrice)}
+                        </span>
+                    )}
+                </div>
             </div>
 
             <p className="shrink-0 text-sm font-semibold">
@@ -846,30 +1303,89 @@ const OrderItem = ({
     );
 };
 
-const SummaryItem = ({ name, quantity, price }) => {
+const SummaryItem = ({
+    image,
+    name,
+    quantity,
+    unitPrice,
+    originalPrice,
+    lineTotal,
+}) => {
+    const hasDiscount =
+        originalPrice !== undefined &&
+        Number(originalPrice) > Number(unitPrice);
+
+    const discountPercentage = hasDiscount
+        ? Math.round(
+              ((Number(originalPrice) - Number(unitPrice)) /
+                  Number(originalPrice)) *
+                  100,
+          )
+        : 0;
+
     return (
-        <div className="flex items-start justify-between gap-4 text-sm">
-            <div className="min-w-0">
-                <p className="font-medium">{name}</p>
+        <div className="flex items-center gap-3 bg-secondary/35 p-2.5">
+            {image && (
+                <div className="size-12 shrink-0 overflow-hidden bg-secondary">
+                    <img
+                        src={image}
+                        alt={name}
+                        className="h-full w-full object-cover"
+                    />
+                </div>
+            )}
 
-                <p className="mt-0.5 text-xs text-muted-foreground">
-                    {quantity} × {formatPrice(price)}
-                </p>
+            <div className="min-w-0 flex-1">
+                <div className="flex items-start justify-between gap-2">
+                    <p className="line-clamp-1 text-sm font-semibold">{name}</p>
+
+                    <span className="shrink-0 text-sm font-black">
+                        {formatPrice(lineTotal)}
+                    </span>
+                </div>
+
+                <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5">
+                    <span className="text-[11px] font-semibold text-muted-foreground">
+                        {formatPrice(unitPrice)} × {quantity}
+                    </span>
+
+                    {hasDiscount && (
+                        <>
+                            <span className="text-[10px] text-muted-foreground line-through">
+                                {formatPrice(originalPrice)}
+                            </span>
+
+                            <span className="rounded-full bg-primary/10 px-1.5 py-0.5 text-[9px] font-bold text-primary">
+                                -{discountPercentage}%
+                            </span>
+                        </>
+                    )}
+                </div>
             </div>
-
-            <p className="shrink-0 font-semibold">
-                {formatPrice(price * quantity)}
-            </p>
         </div>
     );
 };
 
-const SummaryRow = ({ label, value }) => {
+const SummaryRow = ({ label, value, hint, free = false }) => {
     return (
-        <div className="flex items-center justify-between gap-4 text-sm">
-            <span className="text-muted-foreground">{label}</span>
+        <div className="flex items-center justify-between gap-4">
+            <span className="flex items-center gap-1.5 text-muted-foreground">
+                {label}
 
-            <span className="font-medium">{value}</span>
+                {hint && (
+                    <span className="text-[11px] font-medium text-muted-foreground/70">
+                        ({hint})
+                    </span>
+                )}
+            </span>
+
+            {free ? (
+                <span className="rounded-full bg-primary/10 px-2 py-0.5 text-xs font-bold text-primary">
+                    Free
+                </span>
+            ) : (
+                <span className="font-semibold">{formatPrice(value)}</span>
+            )}
         </div>
     );
 };

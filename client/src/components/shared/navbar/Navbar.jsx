@@ -1,14 +1,16 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import {
     Cake,
     Languages,
     LayoutGrid,
     LogOut,
+    Package,
     Search,
     ShoppingCart,
     User,
 } from "lucide-react";
-import { Link } from "react-router";
+import { Link, useLocation, useNavigate } from "react-router";
 
 import {
     Popover,
@@ -18,43 +20,133 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import useAuth from "@/hooks/useAuth";
+import useGet from "@/hooks/useGet";
 import usePost from "@/hooks/usePost";
 import { useLanguage } from "@/context/LanguageContext";
 
 const Navbar = () => {
     const [scrolled, setScrolled] = useState(false);
+    const searchInputRef = useRef(null);
+
+    const navigate = useNavigate();
+    const location = useLocation();
+
+    /*
+     * The search box mirrors ?search= while on /products and clears itself
+     * elsewhere. Adjusting state during render (React's recommended pattern)
+     * keeps it in sync without a cascading effect.
+     */
+    const urlSearch =
+        location.pathname === "/products"
+            ? new URLSearchParams(location.search).get("search")?.trim() || ""
+            : "";
+
+    const [search, setSearch] = useState(urlSearch);
+    const [prevUrlSearch, setPrevUrlSearch] = useState(urlSearch);
+
+    if (urlSearch !== prevUrlSearch) {
+        setPrevUrlSearch(urlSearch);
+        setSearch(urlSearch);
+    }
 
     const { language, toggleLanguage, t } = useLanguage();
+    const isArabic = language === "ar";
 
-    const {
-        isAuthenticated,
-        isLoading,
-        clearUser,
-    } = useAuth();
+    const { isAuthenticated, isLoading, clearUser } = useAuth();
+
+    const queryClient = useQueryClient();
+
+    // Live cart item count for the navbar badge (only for logged-in users)
+    const { data: cartResponse } = useGet({
+        url: "/cart",
+        queryKey: ["cart"],
+        enabled: isAuthenticated,
+        retry: false,
+    });
+
+    const cartCount = cartResponse?.data?.totalItems ?? 0;
 
     const { mutate: logoutUser, isPending: isLoggingOut } = usePost({
         url: "/auth/logout",
         onSuccess: () => {
             clearUser();
+            queryClient.removeQueries({ queryKey: ["cart"] });
         },
     });
 
-    const isArabic = language === "ar";
+    useEffect(() => {
+        const onKeyDown = (event) => {
+            if ((event.ctrlKey || event.metaKey) && event.key === "k") {
+                event.preventDefault();
+                searchInputRef.current?.focus();
+            }
+        };
+
+        window.addEventListener("keydown", onKeyDown);
+
+        return () => {
+            window.removeEventListener("keydown", onKeyDown);
+        };
+    }, []);
+
+    // Mobile navigation lives in the bottom bar; the navbar only shows the
+    // "Track Order" shortcut as an icon on md+ screens.
 
     useEffect(() => {
         const handleScroll = () => {
             setScrolled(window.scrollY > 20);
         };
 
-        window.addEventListener("scroll", handleScroll);
+        handleScroll();
+
+        window.addEventListener("scroll", handleScroll, {
+            passive: true,
+        });
 
         return () => {
             window.removeEventListener("scroll", handleScroll);
         };
     }, []);
 
+    // Global "/" shortcut focuses the search box (ignored while typing).
+    useEffect(() => {
+        const handleKeyDown = (event) => {
+            const target = event.target;
+
+            const isTyping =
+                target instanceof HTMLInputElement ||
+                target instanceof HTMLTextAreaElement ||
+                target instanceof HTMLSelectElement ||
+                target?.isContentEditable;
+
+            if (event.key === "/" && !isTyping) {
+                event.preventDefault();
+                searchInputRef.current?.focus();
+            }
+        };
+
+        window.addEventListener("keydown", handleKeyDown);
+
+        return () => {
+            window.removeEventListener("keydown", handleKeyDown);
+        };
+    }, []);
+
     const handleLogout = () => {
         logoutUser();
+    };
+
+    const handleSearch = (event) => {
+        event.preventDefault();
+
+        const term = search.trim();
+
+        if (!term) {
+            searchInputRef.current?.focus();
+            return;
+        }
+
+        navigate(`/products?search=${encodeURIComponent(term)}`);
     };
 
     return (
@@ -65,9 +157,13 @@ const Navbar = () => {
                     : "bg-background/95 text-foreground backdrop-blur-md"
             }`}
         >
-            <div className="wrapper flex h-16 items-center gap-3 sm:h-17 sm:gap-4">
+            <div className="wrapper flex h-16 items-center gap-2 sm:h-17 sm:gap-4">
                 {/* Logo */}
-                <div className="flex shrink-0 items-center gap-2">
+                <Link
+                    to="/"
+                    aria-label="Crown Kwt home"
+                    className="flex shrink-0 items-center gap-2"
+                >
                     <div
                         className={`flex h-9 w-9 items-center justify-center rounded-tl-xl rounded-br-xl transition-colors ${
                             scrolled
@@ -87,29 +183,60 @@ const Navbar = () => {
                     <span className="hidden text-lg font-bold tracking-tight sm:block">
                         Crown Kwt
                     </span>
-                </div>
+                </Link>
+
+
 
                 {/* Search */}
-                <div className="mx-auto w-full max-w-xl">
+                <form
+                    onSubmit={handleSearch}
+                    className="mx-auto w-full min-w-0 max-w-xl"
+                    role="search"
+                >
                     <div className="relative">
-                        <Search className="pointer-events-none absolute inset-s-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                        <Search className="pointer-events-none absolute start-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
 
                         <Input
-                            dir="ltr"
+                            ref={searchInputRef}
+                            dir="auto"
+                            value={search}
+                            onChange={(event) => setSearch(event.target.value)}
                             placeholder={t.nav.search}
-                            className={`h-10 rounded-none rounded-tl-xl rounded-br-xl ps-10 pe-4 text-left [direction:ltr] shadow-none transition-all duration-300 focus-visible:ring-1 ${
+                            aria-label={t.nav.search}
+                            autoComplete="off"
+                            className={`h-10 rounded-none rounded-tl-xl rounded-br-xl pe-4 text-start shadow-none transition-all duration-300 [direction:inherit] focus-visible:ring-1 ${
+                                language === "ar" ? "pe-10 ps-4" : "pe-4 ps-10"
+                            } ${
                                 scrolled
                                     ? "border-transparent bg-background text-foreground placeholder:text-muted-foreground focus-visible:ring-primary"
                                     : "border-border bg-card text-foreground placeholder:text-muted-foreground focus-visible:ring-primary/30"
                             }`}
                         />
                     </div>
-                </div>
+                </form>
+
+                {/* Track order - md+ icon only; mobile uses the bottom bar */}
+                <Link to="/order-tracking" className="hidden shrink-0 md:block">
+                    <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        aria-label={isArabic ? "تتبع الطلب" : "Track order"}
+                        title={isArabic ? "تتبع الطلب" : "Track order"}
+                        className={`cursor-pointer ${
+                            scrolled
+                                ? "text-primary-foreground hover:bg-primary-foreground/10 hover:text-primary-foreground"
+                                : "text-foreground hover:bg-secondary hover:text-foreground"
+                        }`}
+                    >
+                        <Package className="h-5 w-5" />
+                    </Button>
+                </Link>
 
                 {/* Actions */}
                 <div className="flex shrink-0 items-center gap-1">
                     {/* Cart */}
-                    <Link to="/cart">
+                    <Link to="/cart" className="relative">
                         <Button
                             type="button"
                             variant="ghost"
@@ -121,6 +248,15 @@ const Navbar = () => {
                             }`}
                         >
                             <ShoppingCart className="h-5 w-5" />
+
+                            {cartCount > 0 && (
+                                <span
+                                    dir="ltr"
+                                    className="absolute -top-0.5 inset-e-0 flex h-4.5 min-w-4.5 items-center justify-center rounded-full bg-destructive px-1 text-[10px] font-bold text-white"
+                                >
+                                    {cartCount > 99 ? "99+" : cartCount}
+                                </span>
+                            )}
                         </Button>
                     </Link>
 
@@ -156,9 +292,7 @@ const Navbar = () => {
 
                                     <div className="min-w-0">
                                         <p className="truncate text-sm font-bold text-foreground">
-                                            {isArabic
-                                                ? "حسابي"
-                                                : "My account"}
+                                            {isArabic ? "حسابي" : "My account"}
                                         </p>
 
                                         <p className="text-[11px] text-muted-foreground">
@@ -177,9 +311,7 @@ const Navbar = () => {
                                     >
                                         <LayoutGrid className="size-4" />
 
-                                        {isArabic
-                                            ? "لوحة التحكم"
-                                            : "Dashboard"}
+                                        {isArabic ? "لوحة التحكم" : "Dashboard"}
                                     </Link>
 
                                     <Link
@@ -188,9 +320,7 @@ const Navbar = () => {
                                     >
                                         <User className="size-4" />
 
-                                        {isArabic
-                                            ? "الملف الشخصي"
-                                            : "Profile"}
+                                        {isArabic ? "الملف الشخصي" : "Profile"}
                                     </Link>
 
                                     <button
@@ -219,16 +349,14 @@ const Navbar = () => {
                                 variant="outline-asymmetric"
                                 className={
                                     scrolled
-                                        ? "border-primary-foreground/25 bg-transparent text-primary-foreground hover:bg-primary-foreground/10 hover:text-primary-foreground"
-                                        : "bg-card text-foreground"
+                                        ? "border-primary-foreground/25 bg-transparent px-2.5 text-primary-foreground hover:bg-primary-foreground/10 hover:text-primary-foreground sm:px-3"
+                                        : "bg-card px-2.5 text-foreground sm:px-3"
                                 }
                             >
                                 <User className="h-4 w-4" />
 
-                                <span>
-                                    {isArabic
-                                        ? "تسجيل الدخول"
-                                        : "Login"}
+                                <span className="hidden sm:inline">
+                                    {isArabic ? "تسجيل الدخول" : "Login"}
                                 </span>
                             </Button>
                         </Link>
@@ -241,13 +369,15 @@ const Navbar = () => {
                         onClick={toggleLanguage}
                         className={
                             scrolled
-                                ? "border-primary-foreground/25 bg-transparent text-primary-foreground hover:bg-primary-foreground/10 hover:text-primary-foreground"
-                                : "bg-card text-foreground"
+                                ? "border-primary-foreground/25 bg-transparent px-2.5 text-primary-foreground hover:bg-primary-foreground/10 hover:text-primary-foreground sm:px-3"
+                                : "bg-card px-2.5 text-foreground sm:px-3"
                         }
                     >
                         <Languages className="h-4 w-4" />
 
-                        <span>{t.nav.language}</span>
+                        <span className="hidden sm:inline">
+                            {t.nav.language}
+                        </span>
                     </Button>
                 </div>
             </div>

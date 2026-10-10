@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { Cake } from "lucide-react";
+import { Link } from "react-router";
 
 import { Button } from "@/components/ui/button";
 import { useLanguage } from "@/context/LanguageContext";
@@ -99,19 +100,25 @@ const CakeBanner = () => {
                     {/* Buttons */}
                     <div className="mt-6 flex flex-wrap gap-3 sm:mt-7">
                         <Button
+                            asChild
                             variant="asymmetric"
                             size="lg"
                             className="px-7 shadow-lg shadow-primary/20"
                         >
-                            {t.banner.order}
+                            <Link to="/products">
+                                {t.banner.order}
+                            </Link>
                         </Button>
 
                         <Button
+                            asChild
                             variant="outline-asymmetric"
                             size="lg"
                             className="bg-card px-7 text-foreground"
                         >
-                            {t.banner.menu}
+                            <Link to="/products">
+                                {t.banner.menu}
+                            </Link>
                         </Button>
                     </div>
 

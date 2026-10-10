@@ -1,58 +1,37 @@
-import {
-    Check,
-    Clock3,
-    MapPin,
-    Package,
-    Search,
-    Truck,
-} from "lucide-react";
 import { useState } from "react";
+import { Clock3, Loader2, Package, Search } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-
-const trackingSteps = [
-    {
-        title: "Order placed",
-        description: "Your order has been received.",
-        date: "September 26, 2026 · 10:24 AM",
-        completed: true,
-        icon: Check,
-    },
-    {
-        title: "Order confirmed",
-        description: "Your order has been confirmed.",
-        date: "September 26, 2026 · 10:31 AM",
-        completed: true,
-        icon: Check,
-    },
-    {
-        title: "Preparing your order",
-        description: "Your cakes are being prepared.",
-        date: "September 26, 2026 · 11:05 AM",
-        completed: true,
-        icon: Package,
-    },
-    {
-        title: "Out for delivery",
-        description: "Your order is on its way.",
-        date: "Expected today",
-        current: true,
-        icon: Truck,
-    },
-    {
-        title: "Delivered",
-        description: "Your order will be delivered to you.",
-        date: "Pending",
-        icon: MapPin,
-    },
-];
+import useGet from "@/hooks/useGet";
+import {
+    buildTrackingSteps,
+    formatDate,
+    getStatusClass,
+    getStatusLabel,
+} from "@/utils/orderStatus";
 
 const OrderTracking = () => {
     const [orderId, setOrderId] = useState("");
-    const [searchedOrder, setSearchedOrder] = useState("");
+    const [trackedNumber, setTrackedNumber] = useState("");
+
+    const trimmed = orderId.trim();
+
+    const {
+        data: orderResponse,
+        isError,
+        isFetching,
+    } = useGet({
+        url: `/order/track/${encodeURIComponent(trackedNumber)}`,
+        queryKey: ["track-order", trackedNumber],
+        enabled: Boolean(trackedNumber),
+        retry: false,
+    });
+
+    const order = orderResponse?.data;
+    const trackingSteps = buildTrackingSteps(order, "en");
 
     const handleSubmit = (event) => {
         event.preventDefault();
@@ -63,7 +42,7 @@ const OrderTracking = () => {
             return;
         }
 
-        setSearchedOrder(value);
+        setTrackedNumber(value);
     };
 
     return (
@@ -95,41 +74,87 @@ const OrderTracking = () => {
                                 onChange={(event) =>
                                     setOrderId(event.target.value)
                                 }
-                                placeholder="Enter order ID, e.g. CK-1024"
+                                placeholder="Enter order number, e.g. ORD-XXXX"
                                 className="h-12 rounded-xl"
                             />
 
                             <Button
                                 type="submit"
+                                disabled={!trimmed || isFetching}
                                 className="h-12 rounded-xl px-6"
                             >
-                                <Search className="mr-2 size-4" />
+                                {isFetching ? (
+                                    <Loader2 className="mr-2 size-4 animate-spin" />
+                                ) : (
+                                    <Search className="mr-2 size-4" />
+                                )}
                                 Track order
                             </Button>
                         </form>
                     </CardContent>
                 </Card>
 
-                {searchedOrder && (
-                    <Card className="mt-6 rounded-2xl border bg-background shadow-sm">
-                        <CardContent className="p-5 sm:p-7">
-                            <div className="flex flex-col gap-4 border-b pb-6 sm:flex-row sm:items-center sm:justify-between">
+                {/* Loading */}
+                {isFetching && (
+                    <div className="mt-8 flex items-center justify-center py-10">
+                        <Loader2 className="size-7 animate-spin text-primary" />
+                    </div>
+                )}
+
+                {/* Not found */}
+                {!isFetching && isError && trackedNumber && (
+                    <Card className="mt-8 rounded-2xl border bg-background shadow-sm">
+                        <CardContent className="flex flex-col items-center p-10 text-center">
+                            <div className="mb-4 flex size-12 items-center justify-center rounded-xl bg-muted">
+                                <Package className="size-6 text-muted-foreground" />
+                            </div>
+
+                            <h2 className="text-lg font-bold text-foreground">
+                                Order not found
+                            </h2>
+
+                            <p className="mx-auto mt-2 max-w-sm text-sm leading-6 text-muted-foreground">
+                                We couldn't find an order with that number.
+                                Please double-check it and try again.
+                            </p>
+                        </CardContent>
+                    </Card>
+                )}
+                {/* Result */}
+                {!isFetching && !isError && order && (
+                    <Card className="mt-8 rounded-2xl border bg-background shadow-sm">
+                        <CardContent className="p-5 sm:p-6">
+                            <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
                                 <div>
-                                    <p className="text-sm text-muted-foreground">
-                                        Order
+                                    <p className="text-sm font-semibold text-muted-foreground">
+                                        Order #{order.orderNumber}
                                     </p>
 
-                                    <h2 className="mt-1 text-xl font-bold">
-                                        #{searchedOrder}
-                                    </h2>
+                                    <p className="mt-1 text-sm text-muted-foreground">
+                                        Placed on {formatDate(order.createdAt)}
+                                    </p>
+
+                                    {order.itemCount > 0 && (
+                                        <p className="mt-1 text-sm text-muted-foreground">
+                                            {order.itemCount}{" "}
+                                            {order.itemCount === 1
+                                                ? "item"
+                                                : "items"}
+                                        </p>
+                                    )}
                                 </div>
 
-                                <Badge className="w-fit rounded-lg bg-primary/10 px-3 py-1.5 text-primary hover:bg-primary/10">
-                                    On the way
+                                <Badge
+                                    variant="secondary"
+                                    className={`w-fit rounded-lg px-3 py-1.5 ${getStatusClass(
+                                        order.orderStatus,
+                                    )}`}
+                                >
+                                    {getStatusLabel(order.orderStatus)}
                                 </Badge>
                             </div>
 
-                            <div className="pt-7">
+                            <div className="mt-6">
                                 {trackingSteps.map((step, index) => {
                                     const Icon = step.icon;
                                     const isLast =
@@ -137,7 +162,7 @@ const OrderTracking = () => {
 
                                     return (
                                         <div
-                                            key={step.title}
+                                            key={step.key}
                                             className="relative flex gap-4"
                                         >
                                             {!isLast && (
@@ -178,9 +203,11 @@ const OrderTracking = () => {
                                                         {step.title}
                                                     </h3>
 
-                                                    <span className="text-xs text-muted-foreground">
-                                                        {step.date}
-                                                    </span>
+                                                    {step.date && (
+                                                        <span className="text-xs text-muted-foreground">
+                                                            {step.date}
+                                                        </span>
+                                                    )}
                                                 </div>
 
                                                 <p className="mt-1 text-sm leading-5 text-muted-foreground">
@@ -192,22 +219,30 @@ const OrderTracking = () => {
                                 })}
                             </div>
 
-                            <div className="mt-7 flex items-start gap-3 rounded-xl bg-muted/60 p-4">
-                                <Clock3 className="mt-0.5 size-4 shrink-0 text-primary" />
+                            {order.orderStatus !== "cancelled" &&
+                                order.orderStatus !== "delivered" && (
+                                    <div className="mt-7 flex items-start gap-3 rounded-xl bg-muted/60 p-4">
+                                        <Clock3 className="mt-0.5 size-4 shrink-0 text-primary" />
 
-                                <div>
-                                    <p className="text-sm font-semibold">
-                                        Estimated delivery
-                                    </p>
+                                        <div>
+                                            <p className="text-sm font-semibold">
+                                                Estimated delivery
+                                            </p>
 
-                                    <p className="mt-1 text-sm text-muted-foreground">
-                                        Your order is currently on the way.
-                                    </p>
-                                </div>
-                            </div>
+                                            <p className="mt-1 text-sm text-muted-foreground">
+                                                {order.orderStatus ===
+                                                "out_for_delivery"
+                                                    ? "Your order is on the way."
+                                                    : "We'll update you when it's out for delivery."}
+                                            </p>
+                                        </div>
+                                    </div>
+                                )}
                         </CardContent>
                     </Card>
                 )}
+
+
             </div>
         </div>
     );

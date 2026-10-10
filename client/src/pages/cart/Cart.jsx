@@ -1,9 +1,10 @@
-
-import { useState } from "react";
+import { useMemo, useState } from "react";
+import { useNavigate } from "react-router";
 import {
     ArrowRight,
     Check,
     ChevronRight,
+    Loader2,
     Minus,
     Plus,
     ShoppingBag,
@@ -21,211 +22,150 @@ import {
 } from "@/components/ui/dialog";
 import { Checkbox } from "@/components/ui/checkbox";
 import { useLanguage } from "@/context/LanguageContext";
+import useGet from "@/hooks/useGet";
+import usePost from "@/hooks/usePost";
+import usePatch from "@/hooks/usePatch";
+import useDelete from "@/hooks/useDelete";
+import { toast } from "sonner";
 
-const initialCartItems = [
-    {
-        id: "cake-001",
-        name: {
-            en: "Classic Chocolate Celebration Cake",
-            ar: "كعكة الشوكولاتة الكلاسيكية للاحتفال",
-        },
-        image: "https://images.unsplash.com/photo-1571115177098-24ec42ed204d?w=700&auto=format&fit=crop&q=85",
-        size: { en: "Medium", ar: "متوسط" },
-        servings: "8-12",
-        price: 12.5,
-        discountPercentage: 15,
-        discountedPrice: 10.625,
-        quantity: 1,
-    },
-    {
-        id: "cake-002",
-        name: {
-            en: "Strawberry Cream Cake",
-            ar: "كعكة كريمة الفراولة",
-        },
-        image: "https://images.unsplash.com/photo-1565958011703-44f9829ba187?w=700&auto=format&fit=crop&q=85",
-        size: { en: "Small", ar: "صغير" },
-        servings: "3-4",
-        price: 8.5,
-        discountPercentage: 0,
-        discountedPrice: 8.5,
-        quantity: 1,
-    },
-    {
-        id: "cake-003",
-        name: {
-            en: "Red Velvet Celebration Cake",
-            ar: "كعكة ريد فلفت للاحتفال",
-        },
-        image: "https://images.unsplash.com/photo-1586788680434-30d324b2d46f?w=700&auto=format&fit=crop&q=85",
-        size: { en: "Medium", ar: "متوسط" },
-        servings: "8-12",
-        price: 14,
-        discountPercentage: 10,
-        discountedPrice: 12.6,
-        quantity: 1,
-    },
-];
-
-const addOns = [
-    {
-        id: "candles",
-        name: { en: "Birthday Candles", ar: "شموع عيد الميلاد" },
-        description: {
-            en: "A colorful candle set for your celebration.",
-            ar: "مجموعة شموع ملونة لاحتفالك.",
-        },
-        image: "https://images.unsplash.com/photo-1606983340126-99ab4feaa64a?w=400&auto=format&fit=crop&q=85",
-        price: 0.5,
-    },
-    {
-        id: "card",
-        name: { en: "Greeting Card", ar: "بطاقة تهنئة" },
-        description: {
-            en: "Add a personal message to your cake.",
-            ar: "أضف رسالة شخصية مع كعكتك.",
-        },
-        image: "https://images.unsplash.com/photo-1513883049090-d0b7439799bf?w=400&auto=format&fit=crop&q=85",
-        price: 0.75,
-    },
-    {
-        id: "flowers",
-        name: { en: "Fresh Flowers", ar: "زهور نضرة" },
-        description: {
-            en: "A small fresh flower arrangement.",
-            ar: "تنسيق صغير من الزهور النضرة.",
-        },
-        image: "https://images.unsplash.com/photo-1490750967868-88aa4486c946?w=400&auto=format&fit=crop&q=85",
-        price: 2,
-    },
-    {
-        id: "chocolate-box",
-        name: { en: "Chocolate Box", ar: "علبة شوكولاتة" },
-        description: {
-            en: "A delicious chocolate box to share.",
-            ar: "علبة شوكولاتة لذيذة للمشاركة.",
-        },
-        image: "https://images.unsplash.com/photo-1548907040-4d42fcaa4f7d?w=400&auto=format&fit=crop&q=85",
-        price: 1.5,
-    },
-    {
-        id: "cake-topper",
-        name: { en: "Cake Topper", ar: "زينة الكعكة" },
-        description: {
-            en: "A stylish topper for your celebration cake.",
-            ar: "زينة أنيقة لكعكة الاحتفال.",
-        },
-        image: "https://images.unsplash.com/photo-1558636508-e0db3814bd1d?w=400&auto=format&fit=crop&q=85",
-        price: 1,
-    },
-    {
-        id: "mini-balloons",
-        name: { en: "Mini Balloons", ar: "بالونات صغيرة" },
-        description: {
-            en: "A small balloon set for your celebration.",
-            ar: "مجموعة بالونات صغيرة لاحتفالك.",
-        },
-        image: "https://images.unsplash.com/photo-1530103862676-de8c9debad1d?w=400&auto=format&fit=crop&q=85",
-        price: 1.25,
-    },
-    {
-        id: "rose-bouquet",
-        name: { en: "Rose Bouquet", ar: "باقة ورد" },
-        description: {
-            en: "A beautiful bouquet of fresh roses.",
-            ar: "باقة جميلة من الورود الطازجة.",
-        },
-        image: "https://images.unsplash.com/photo-1490750967868-88aa4486c946?w=400&auto=format&fit=crop&q=85",
-        price: 3.5,
-    },
-    {
-        id: "macaron-box",
-        name: { en: "Macaron Box", ar: "علبة ماكارون" },
-        description: {
-            en: "A colorful box of premium macarons.",
-            ar: "علبة ملونة من الماكارون الفاخر.",
-        },
-        image: "https://images.unsplash.com/photo-1569864358642-9d1684040f43?w=400&auto=format&fit=crop&q=85",
-        price: 2.5,
-    },
-    {
-        id: "gift-wrap",
-        name: { en: "Premium Gift Wrap", ar: "تغليف هدايا فاخر" },
-        description: {
-            en: "Beautiful premium packaging for gifting.",
-            ar: "تغليف فاخر وجميل مناسب للهدايا.",
-        },
-        image: "https://images.unsplash.com/photo-1512909006721-3d6018887383?w=400&auto=format&fit=crop&q=85",
-        price: 0.75,
-    },
-    {
-        id: "chocolate-strawberries",
-        name: {
-            en: "Chocolate Strawberries",
-            ar: "فراولة بالشوكولاتة",
-        },
-        description: {
-            en: "Fresh strawberries covered in chocolate.",
-            ar: "فراولة طازجة مغطاة بالشوكولاتة.",
-        },
-        image: "https://images.unsplash.com/photo-1578985545062-69928b1d9587?w=400&auto=format&fit=crop&q=85",
-        price: 2.75,
-    },
-    {
-        id: "birthday-banner",
-        name: { en: "Birthday Banner", ar: "لافتة عيد ميلاد" },
-        description: {
-            en: "A festive banner for your special day.",
-            ar: "لافتة احتفالية ليومك المميز.",
-        },
-        image: "https://images.unsplash.com/photo-1464349095431-e9a21285b5f3?w=400&auto=format&fit=crop&q=85",
-        price: 1.25,
-    },
-    {
-        id: "premium-candle",
-        name: {
-            en: "Premium Candle Set",
-            ar: "مجموعة شموع فاخرة",
-        },
-        description: {
-            en: "Elegant candles for a premium celebration.",
-            ar: "شموع أنيقة لاحتفال مميز.",
-        },
-        image: "https://images.unsplash.com/photo-1603006905003-be475563bc59?w=400&auto=format&fit=crop&q=85",
-        price: 1.5,
-    },
-];
-
-const featuredAddOns = addOns.slice(0, 6);
+const formatPrice = (price) => `${Number(price).toFixed(3)} KWD`;
 
 const Cart = () => {
     const { language } = useLanguage();
     const isArabic = language === "ar";
+    const navigate = useNavigate();
 
-    const [cartItems, setCartItems] = useState(initialCartItems);
+    const {
+        data: cartResponse,
+        isLoading: isCartLoading,
+        isError: isCartError,
+        refetch: refetchCart,
+    } = useGet({
+        url: "/cart",
+        queryKey: ["cart"],
+        retry: false,
+    });
 
-    const [selectedItems, setSelectedItems] = useState(
-        initialCartItems.map((item) => item.id),
-    );
+    const {
+        data: addOnsResponse,
+        isLoading: isAddOnsLoading,
+        isError: isAddOnsError,
+        refetch: refetchAddOns,
+    } = useGet({
+        url: "/add-ons",
+        queryKey: ["add-ons"],
+        retry: false,
+    });
 
-    const [selectedAddOns, setSelectedAddOns] = useState([]);
+    const cartData = cartResponse?.data;
 
-    const [addOnQuantities, setAddOnQuantities] = useState(
-        Object.fromEntries(addOns.map((item) => [item.id, 1])),
-    );
+    const addOns = useMemo(() => {
+        const apiAddOns = addOnsResponse?.data ?? [];
+
+        return apiAddOns
+            .filter((addOn) => addOn.isActive)
+            .map((addOn) => ({
+                id: addOn._id,
+                name: addOn.name,
+                image: addOn.imageUrl,
+                price: Number(addOn.price ?? 0),
+            }));
+    }, [addOnsResponse]);
+
+    const cartAddOns = useMemo(() => {
+        const apiAddOns = cartData?.addOns ?? [];
+
+        return apiAddOns
+            .filter((item) => item.addOn)
+            .map((item) => ({
+                id: item.addOn._id,
+                quantity: item.quantity,
+            }));
+    }, [cartData]);
+
+    const addOnCartMap = useMemo(() => {
+        return new Map(cartAddOns.map((item) => [item.id, item.quantity]));
+    }, [cartAddOns]);
+
+    const selectedAddOnItems = useMemo(() => {
+        return addOns
+            .filter((addOn) => addOnCartMap.has(addOn.id))
+            .map((addOn) => ({
+                ...addOn,
+                quantity: addOnCartMap.get(addOn.id),
+            }));
+    }, [addOns, addOnCartMap]);
+
+    const cartItems = useMemo(() => {
+        const apiItems = cartData?.items ?? [];
+
+        return apiItems
+            .map((item) => {
+                const cake = item.cake;
+
+                if (!cake) {
+                    return null;
+                }
+
+                const price = Number(cake.price ?? 0);
+                const discountPercentage = Number(cake.discountPercentage ?? 0);
+
+                const discountedPrice = Number(
+                    cake.discountedPrice ??
+                        (price - (price * discountPercentage) / 100).toFixed(3),
+                );
+
+                const image =
+                    typeof cake.images?.[0] === "string"
+                        ? cake.images[0]
+                        : cake.images?.[0]?.url;
+
+                return {
+                    id: cake._id,
+                    name: cake.name,
+                    image,
+                    size: cake.size ?? {
+                        en: "",
+                        ar: "",
+                    },
+                    weightSize: cake.weightSize,
+                    servings: cake.servings ?? "",
+                    price,
+                    discountPercentage,
+                    discountedPrice,
+                    quantity: item.quantity,
+                    stock: cake.stock,
+                    isActive: cake.isActive,
+                    slug: cake.slug,
+                };
+            })
+            .filter(Boolean);
+    }, [cartData]);
+
+    const [selectedItems, setSelectedItems] = useState(null);
+
+    const selectedItemIds =
+        selectedItems === null
+            ? cartItems.map((item) => item.id)
+            : selectedItems.filter((id) =>
+                  cartItems.some((item) => item.id === id),
+              );
 
     const selectedCartItems = cartItems.filter((item) =>
-        selectedItems.includes(item.id),
+        selectedItemIds.includes(item.id),
     );
 
-    const selectedAddOnItems = addOns.filter((item) =>
-        selectedAddOns.includes(item.id),
-    );
-
-    const totalItems = cartItems.reduce(
+    const totalCakeItems = cartItems.reduce(
         (total, item) => total + item.quantity,
         0,
     );
+
+    const totalAddOnItems = selectedAddOnItems.reduce(
+        (total, item) => total + item.quantity,
+        0,
+    );
+
+    const totalItems = totalCakeItems + totalAddOnItems;
 
     const selectedCakesCount = selectedCartItems.reduce(
         (total, item) => total + item.quantity,
@@ -233,7 +173,7 @@ const Cart = () => {
     );
 
     const selectedAddOnsCount = selectedAddOnItems.reduce(
-        (total, item) => total + addOnQuantities[item.id],
+        (total, item) => total + item.quantity,
         0,
     );
 
@@ -244,87 +184,43 @@ const Cart = () => {
         0,
     );
 
+    const cakesOriginalTotal = selectedCartItems.reduce(
+        (total, item) => total + item.price * item.quantity,
+        0,
+    );
+
     const addOnsTotal = selectedAddOnItems.reduce(
-        (total, item) => total + item.price * addOnQuantities[item.id],
+        (total, item) => total + item.price * item.quantity,
         0,
     );
 
     const subtotal = cakesTotal + addOnsTotal;
-    const deliveryFee = subtotal >= 15 ? 0 : 1.5;
+
+    const discount = Math.max(0, cakesOriginalTotal - cakesTotal);
+
+    const deliveryFee = 0;
     const total = subtotal + deliveryFee;
 
     const toggleItem = (id) => {
-        setSelectedItems((current) =>
-            current.includes(id)
-                ? current.filter((itemId) => itemId !== id)
-                : [...current, id],
-        );
+        setSelectedItems((current) => {
+            const selected = current ?? cartItems.map((item) => item.id);
+
+            return selected.includes(id)
+                ? selected.filter((itemId) => itemId !== id)
+                : [...selected, id];
+        });
     };
 
     const toggleAllItems = () => {
-        if (selectedItems.length === cartItems.length) {
-            setSelectedItems([]);
-        } else {
-            setSelectedItems(cartItems.map((item) => item.id));
-        }
-    };
+        setSelectedItems((current) => {
+            const selected = current ?? cartItems.map((item) => item.id);
 
-    const updateCakeQuantity = (id, value) => {
-        setCartItems((current) =>
-            current.map((item) =>
-                item.id === id
-                    ? {
-                          ...item,
-                          quantity: Math.max(1, Math.min(value, 50)),
-                      }
-                    : item,
-            ),
-        );
-    };
+            if (selected.length === cartItems.length) {
+                return [];
+            }
 
-    const removeItem = (id) => {
-        setCartItems((current) => current.filter((item) => item.id !== id));
-
-        setSelectedItems((current) =>
-            current.filter((itemId) => itemId !== id),
-        );
-    };
-
-    const toggleAddOn = (id) => {
-        setSelectedAddOns((current) =>
-            current.includes(id)
-                ? current.filter((itemId) => itemId !== id)
-                : [...current, id],
-        );
-    };
-
-    const increaseAddOnQuantity = (id) => {
-        if (!selectedAddOns.includes(id)) {
-            setSelectedAddOns((current) => [...current, id]);
-
-            setAddOnQuantities((current) => ({
-                ...current,
-                [id]: 1,
-            }));
-
-            return;
-        }
-
-        setAddOnQuantities((current) => ({
-            ...current,
-            [id]: Math.min(current[id] + 1, 50),
-        }));
-    };
-
-    const decreaseAddOnQuantity = (id) => {
-        if (!selectedAddOns.includes(id)) {
-            return;
-        }
-
-        setAddOnQuantities((current) => ({
-            ...current,
-            [id]: Math.max(current[id] - 1, 1),
-        }));
+            return cartItems.map((item) => item.id);
+        });
     };
 
     const scrollToAddOns = () => {
@@ -333,6 +229,69 @@ const Cart = () => {
             block: "center",
         });
     };
+
+    const proceedToCheckout = () => {
+        if (selectedItemIds.length === 0) {
+            return;
+        }
+
+        navigate("/checkout", {
+            state: {
+                cakeIds: selectedItemIds,
+            },
+        });
+    };
+
+    if (isCartLoading || isAddOnsLoading) {
+        return (
+            <main className="bg-background pb-16 md:pb-0">
+                <section className="pt-24 md:pt-28">
+                    <div className="wrapper">
+                        <div className="flex min-h-[400px] items-center justify-center">
+                            <ShoppingBag className="size-8 animate-pulse text-primary" />
+                        </div>
+                    </div>
+                </section>
+            </main>
+        );
+    }
+
+    if (isCartError || isAddOnsError) {
+        return (
+            <main className="bg-background pb-16 md:pb-0">
+                <section className="pt-24 md:pt-28">
+                    <div className="wrapper">
+                        <div className="flex min-h-[400px] flex-col items-center justify-center text-center">
+                            <ShoppingBag className="size-10 text-destructive" />
+
+                            <h2 className="mt-4 text-lg font-black">
+                                {isArabic
+                                    ? "تعذر تحميل السلة"
+                                    : "Unable to load your cart"}
+                            </h2>
+
+                            <Button
+                                type="button"
+                                variant="asymmetric"
+                                className="mt-5"
+                                onClick={() => {
+                                    if (isCartError) {
+                                        refetchCart();
+                                    }
+
+                                    if (isAddOnsError) {
+                                        refetchAddOns();
+                                    }
+                                }}
+                            >
+                                {isArabic ? "حاول مرة أخرى" : "Try again"}
+                            </Button>
+                        </div>
+                    </div>
+                </section>
+            </main>
+        );
+    }
 
     return (
         <main className="bg-background pb-16 md:pb-0">
@@ -416,7 +375,7 @@ const Cart = () => {
                                         id="select-all"
                                         checked={
                                             cartItems.length > 0 &&
-                                            selectedItems.length ===
+                                            selectedItemIds.length ===
                                                 cartItems.length
                                         }
                                         onCheckedChange={toggleAllItems}
@@ -443,23 +402,11 @@ const Cart = () => {
                                             key={item.id}
                                             item={item}
                                             language={language}
-                                            selected={selectedItems.includes(
+                                            selected={selectedItemIds.includes(
                                                 item.id,
                                             )}
                                             onToggle={() => toggleItem(item.id)}
-                                            onIncrease={() =>
-                                                updateCakeQuantity(
-                                                    item.id,
-                                                    item.quantity + 1,
-                                                )
-                                            }
-                                            onDecrease={() =>
-                                                updateCakeQuantity(
-                                                    item.id,
-                                                    item.quantity - 1,
-                                                )
-                                            }
-                                            onRemove={() => removeItem(item.id)}
+                                            onUpdated={refetchCart}
                                         />
                                     ))}
                                 </div>
@@ -527,7 +474,7 @@ const Cart = () => {
 
                                                 {isArabic
                                                     ? "عرض جميع الإضافات"
-                                                    : "See all 12 add-ons"}
+                                                    : `See all ${addOns.length} add-ons`}
 
                                                 <ChevronRight className="size-4 rtl:rotate-180" />
                                             </DialogTrigger>
@@ -547,28 +494,16 @@ const Cart = () => {
                                                             key={addOn.id}
                                                             addOn={addOn}
                                                             language={language}
-                                                            selected={selectedAddOns.includes(
+                                                            selected={addOnCartMap.has(
                                                                 addOn.id,
                                                             )}
                                                             quantity={
-                                                                addOnQuantities[
-                                                                    addOn.id
-                                                                ]
-                                                            }
-                                                            onToggle={() =>
-                                                                toggleAddOn(
+                                                                addOnCartMap.get(
                                                                     addOn.id,
-                                                                )
+                                                                ) ?? 0
                                                             }
-                                                            onIncrease={() =>
-                                                                increaseAddOnQuantity(
-                                                                    addOn.id,
-                                                                )
-                                                            }
-                                                            onDecrease={() =>
-                                                                decreaseAddOnQuantity(
-                                                                    addOn.id,
-                                                                )
+                                                            onUpdated={
+                                                                refetchCart
                                                             }
                                                         />
                                                     ))}
@@ -578,30 +513,20 @@ const Cart = () => {
                                     </div>
 
                                     <div className="mt-5 grid grid-cols-2 gap-2.5 sm:gap-3 lg:grid-cols-3">
-                                        {featuredAddOns.map((addOn) => (
+                                        {addOns.slice(0, 6).map((addOn) => (
                                             <FeaturedAddOn
                                                 key={addOn.id}
                                                 addOn={addOn}
                                                 language={language}
-                                                selected={selectedAddOns.includes(
+                                                selected={addOnCartMap.has(
                                                     addOn.id,
                                                 )}
                                                 quantity={
-                                                    addOnQuantities[addOn.id]
-                                                }
-                                                onToggle={() =>
-                                                    toggleAddOn(addOn.id)
-                                                }
-                                                onIncrease={() =>
-                                                    increaseAddOnQuantity(
+                                                    addOnCartMap.get(
                                                         addOn.id,
-                                                    )
+                                                    ) ?? 0
                                                 }
-                                                onDecrease={() =>
-                                                    decreaseAddOnQuantity(
-                                                        addOn.id,
-                                                    )
-                                                }
+                                                onUpdated={refetchCart}
                                             />
                                         ))}
                                     </div>
@@ -610,164 +535,265 @@ const Cart = () => {
                         </div>
 
                         <aside className="w-full xl:w-[360px]">
-                            <div className="rounded-none rounded-tl-3xl rounded-br-3xl border border-border bg-card p-5 md:p-6 xl:sticky xl:top-24">
-                                <h2 className="text-lg font-black tracking-tight">
-                                    {isArabic ? "ملخص الطلب" : "Order summary"}
-                                </h2>
-
-                                <div className="mt-5 space-y-4">
-                                    {selectedCartItems.length > 0 && (
-                                        <div>
-                                            <p className="mb-3 text-xs font-bold uppercase tracking-[0.12em] text-muted-foreground">
-                                                {isArabic ? "الكعكات" : "Cakes"}
-                                            </p>
-
-                                            <div className="space-y-3">
-                                                {selectedCartItems.map(
-                                                    (item) => (
-                                                        <SummaryItem
-                                                            key={item.id}
-                                                            name={
-                                                                item.name[
-                                                                    language
-                                                                ]
-                                                            }
-                                                            quantity={
-                                                                item.quantity
-                                                            }
-                                                            unitPrice={
-                                                                item.discountedPrice
-                                                            }
-                                                            lineTotal={
-                                                                item.discountedPrice *
-                                                                item.quantity
-                                                            }
-                                                        />
-                                                    ),
-                                                )}
-                                            </div>
-                                        </div>
-                                    )}
-
-                                    {selectedAddOnItems.length > 0 && (
-                                        <div>
-                                            <p className="mb-3 text-xs font-bold uppercase tracking-[0.12em] text-muted-foreground">
-                                                {isArabic
-                                                    ? "الإضافات"
-                                                    : "Add-ons"}
-                                            </p>
-
-                                            <div className="space-y-3">
-                                                {selectedAddOnItems.map(
-                                                    (addOn) => {
-                                                        const quantity =
-                                                            addOnQuantities[
-                                                                addOn.id
-                                                            ];
-
-                                                        return (
-                                                            <SummaryItem
-                                                                key={addOn.id}
-                                                                name={
-                                                                    addOn.name[
-                                                                        language
-                                                                    ]
-                                                                }
-                                                                quantity={
-                                                                    quantity
-                                                                }
-                                                                unitPrice={
-                                                                    addOn.price
-                                                                }
-                                                                lineTotal={
-                                                                    addOn.price *
-                                                                    quantity
-                                                                }
-                                                            />
-                                                        );
-                                                    },
-                                                )}
-                                            </div>
-                                        </div>
-                                    )}
-                                </div>
-
-                                <div className="my-5 border-t border-border" />
-
-                                <div className="space-y-3 text-sm">
-                                    <SummaryRow
-                                        label={
-                                            isArabic
-                                                ? "المجموع الفرعي"
-                                                : "Subtotal"
-                                        }
-                                        value={subtotal}
-                                    />
-
-                                    <SummaryRow
-                                        label={
-                                            isArabic ? "التوصيل" : "Delivery"
-                                        }
-                                        value={deliveryFee}
-                                        free={deliveryFee === 0}
-                                    />
-                                </div>
-
-                                {deliveryFee === 0 && (
-                                    <div className="mt-4 rounded-none rounded-tl-xl rounded-br-xl bg-secondary/60 px-3 py-2.5 text-xs font-semibold text-primary">
+                            <div className="overflow-hidden rounded-none rounded-tl-3xl rounded-br-3xl border border-border bg-card xl:sticky xl:top-24">
+                                <div className="flex items-center justify-between gap-3 border-b border-border bg-secondary/40 px-5 py-4 md:px-6">
+                                    <h2 className="text-lg font-black tracking-tight">
                                         {isArabic
-                                            ? "لقد حصلت على توصيل مجاني."
-                                            : "You've unlocked free delivery."}
-                                    </div>
-                                )}
+                                            ? "ملخص الطلب"
+                                            : "Order summary"}
+                                    </h2>
 
-                                <div className="my-5 border-t border-border" />
+                                    {selectedItemsCount > 0 && (
+                                        <span className="rounded-full bg-primary px-2.5 py-1 text-[11px] font-bold text-primary-foreground">
+                                            {selectedItemsCount}{" "}
+                                            {isArabic
+                                                ? "عنصر"
+                                                : selectedItemsCount === 1
+                                                  ? "item"
+                                                  : "items"}
+                                        </span>
+                                    )}
+                                </div>
 
-                                <div className="flex items-center justify-between gap-4">
-                                    <div>
-                                        <p className="text-sm font-semibold text-muted-foreground">
-                                            {isArabic ? "الإجمالي" : "Total"}
-                                        </p>
+                                <div className="p-5 md:p-6">
+                                    {selectedItemsCount === 0 ? (
+                                        <div className="py-6 text-center">
+                                            <ShoppingBag className="mx-auto size-8 text-muted-foreground" />
 
-                                        {selectedItemsCount > 0 && (
+                                            <p className="mt-3 text-sm font-semibold">
+                                                {isArabic
+                                                    ? "لم تحدد أي عنصر بعد"
+                                                    : "No items selected yet"}
+                                            </p>
+
                                             <p className="mt-1 text-xs text-muted-foreground">
-                                                {selectedItemsCount}{" "}
                                                 {isArabic
-                                                    ? "عنصر محدد"
-                                                    : "items selected"}
+                                                    ? "حدد عنصرًا لرؤية الأسعار."
+                                                    : "Select an item to see your price breakdown."}
                                             </p>
-                                        )}
+                                        </div>
+                                    ) : (
+                                        <>
+                                            <div className="space-y-4 pe-1">
+                                                {selectedCartItems.length >
+                                                    0 && (
+                                                    <div>
+                                                        <p className="mb-2 text-[11px] font-bold uppercase tracking-[0.12em] text-muted-foreground">
+                                                            {isArabic
+                                                                ? "الكعكات"
+                                                                : "Cakes"}
+                                                        </p>
+
+                                                        <div className="space-y-2">
+                                                            {selectedCartItems.map(
+                                                                (item) => (
+                                                                    <SummaryItem
+                                                                        key={
+                                                                            item.id
+                                                                        }
+                                                                        image={
+                                                                            item.image
+                                                                        }
+                                                                        name={
+                                                                            item
+                                                                                .name[
+                                                                                language
+                                                                            ]
+                                                                        }
+                                                                        quantity={
+                                                                            item.quantity
+                                                                        }
+                                                                        unitPrice={
+                                                                            item.discountedPrice
+                                                                        }
+                                                                        originalPrice={
+                                                                            item.price
+                                                                        }
+                                                                        discountPercentage={
+                                                                            item.discountPercentage
+                                                                        }
+                                                                        lineTotal={
+                                                                            item.discountedPrice *
+                                                                            item.quantity
+                                                                        }
+                                                                    />
+                                                                ),
+                                                            )}
+                                                        </div>
+                                                    </div>
+                                                )}
+
+                                                {selectedAddOnItems.length >
+                                                    0 && (
+                                                    <div>
+                                                        <p className="mb-2 text-[11px] font-bold uppercase tracking-[0.12em] text-muted-foreground">
+                                                            {isArabic
+                                                                ? "الإضافات"
+                                                                : "Add-ons"}
+                                                        </p>
+
+                                                        <div className="space-y-2">
+                                                            {selectedAddOnItems.map(
+                                                                (addOn) => (
+                                                                    <SummaryItem
+                                                                        key={
+                                                                            addOn.id
+                                                                        }
+                                                                        image={
+                                                                            addOn.image
+                                                                        }
+                                                                        name={
+                                                                            addOn
+                                                                                .name[
+                                                                                language
+                                                                            ]
+                                                                        }
+                                                                        quantity={
+                                                                            addOn.quantity
+                                                                        }
+                                                                        unitPrice={
+                                                                            addOn.price
+                                                                        }
+                                                                        lineTotal={
+                                                                            addOn.price *
+                                                                            addOn.quantity
+                                                                        }
+                                                                    />
+                                                                ),
+                                                            )}
+                                                        </div>
+                                                    </div>
+                                                )}
+                                            </div>
+
+                                            <div className="my-5 border-t border-dashed border-border" />
+
+                                            <div className="space-y-3 text-sm">
+                                                {selectedCartItems.length >
+                                                    0 && (
+                                                    <SummaryRow
+                                                        label={
+                                                            isArabic
+                                                                ? "الكعكات"
+                                                                : "Cakes"
+                                                        }
+                                                        hint={`${selectedCakesCount} ${
+                                                            isArabic
+                                                                ? "قطعة"
+                                                                : "pcs"
+                                                        }`}
+                                                        value={cakesTotal}
+                                                    />
+                                                )}
+
+                                                {selectedAddOnItems.length >
+                                                    0 && (
+                                                    <SummaryRow
+                                                        label={
+                                                            isArabic
+                                                                ? "الإضافات"
+                                                                : "Add-ons"
+                                                        }
+                                                        hint={`${selectedAddOnsCount} ${
+                                                            isArabic
+                                                                ? "قطعة"
+                                                                : "pcs"
+                                                        }`}
+                                                        value={addOnsTotal}
+                                                    />
+                                                )}
+
+                                                <SummaryRow
+                                                    label={
+                                                        isArabic
+                                                            ? "التوصيل"
+                                                            : "Delivery"
+                                                    }
+                                                    value={deliveryFee}
+                                                    free={deliveryFee === 0}
+                                                    isArabic={isArabic}
+                                                />
+                                            </div>
+
+                                            {discount > 0 && (
+                                                <div className="mt-4 flex items-center justify-between gap-3 rounded-none rounded-tl-xl rounded-br-xl border border-primary/20 bg-primary/10 px-3 py-2.5">
+                                                    <div className="flex items-center gap-2 text-xs font-bold text-primary">
+                                                        <Sparkles className="size-4" />
+
+                                                        {isArabic
+                                                            ? "إجمالي ما وفرته"
+                                                            : "Total savings"}
+                                                    </div>
+
+                                                    <span
+                                                        dir="ltr"
+                                                        className="text-sm font-black text-primary"
+                                                    >
+                                                        {formatPrice(discount)}
+                                                    </span>
+                                                </div>
+                                            )}
+
+                                            {deliveryFee === 0 && (
+                                                <p className="mt-3 flex items-center gap-1.5 text-xs font-semibold text-primary">
+                                                    <Check className="size-3.5" />
+
+                                                    {isArabic
+                                                        ? "لقد حصلت على توصيل مجاني."
+                                                        : "You've unlocked free delivery."}
+                                                </p>
+                                            )}
+                                        </>
+                                    )}
+
+                                    <div className="my-5 border-t border-border" />
+
+                                    <div className="flex items-end justify-between gap-4">
+                                        <div>
+                                            <p className="text-sm font-bold">
+                                                {isArabic
+                                                    ? "الإجمالي"
+                                                    : "Total"}
+                                            </p>
+
+                                            <p className="mt-0.5 text-[11px] text-muted-foreground">
+                                                {isArabic
+                                                    ? "شامل التوصيل"
+                                                    : "Including delivery"}
+                                            </p>
+                                        </div>
+
+                                        <span
+                                            dir="ltr"
+                                            className="text-2xl font-black tracking-tight text-primary"
+                                        >
+                                            {formatPrice(total)}
+                                        </span>
                                     </div>
 
-                                    <span
-                                        dir="ltr"
-                                        className="text-xl font-black"
+                                    <Button
+                                        type="button"
+                                        variant="asymmetric"
+                                        size="lg"
+                                        disabled={selectedItemIds.length === 0}
+                                        className="mt-5 h-12 w-full gap-2 text-sm font-bold"
+                                        onClick={proceedToCheckout}
                                     >
-                                        {total.toFixed(3)} KWD
-                                    </span>
-                                </div>
-
-                                <Button
-                                    type="button"
-                                    variant="asymmetric"
-                                    size="lg"
-                                    disabled={selectedItems.length === 0}
-                                    className="mt-6 h-12 w-full gap-2 text-sm font-bold"
-                                >
-                                    {isArabic
-                                        ? "متابعة الدفع"
-                                        : "Proceed to checkout"}
-
-                                    <ArrowRight className="size-4 rtl:rotate-180" />
-                                </Button>
-
-                                {selectedItems.length === 0 && (
-                                    <p className="mt-3 text-center text-xs text-destructive">
                                         {isArabic
-                                            ? "حدد عنصرًا واحدًا على الأقل للمتابعة."
-                                            : "Select at least one item to continue."}
-                                    </p>
-                                )}
+                                            ? "متابعة الدفع"
+                                            : "Proceed to checkout"}
+
+                                        <ArrowRight className="size-4 rtl:rotate-180" />
+                                    </Button>
+
+                                    {selectedItemIds.length === 0 && (
+                                        <p className="mt-3 text-center text-xs text-destructive">
+                                            {isArabic
+                                                ? "حدد عنصرًا واحدًا على الأقل للمتابعة."
+                                                : "Select at least one item to continue."}
+                                        </p>
+                                    )}
+                                </div>
                             </div>
                         </aside>
                     </div>
@@ -777,17 +803,77 @@ const Cart = () => {
     );
 };
 
-const CartItem = ({
-    item,
-    language,
-    selected,
-    onToggle,
-    onIncrease,
-    onDecrease,
-    onRemove,
-}) => {
+const CartItem = ({ item, language, selected, onToggle, onUpdated }) => {
     const isArabic = language === "ar";
+
+    const { mutate: updateCartItem, isPending: isUpdating } = usePatch({
+        url: `/cart/items/${item.id}`,
+    });
+
+    const { mutate: deleteCartItem, isPending: isRemoving } = useDelete({
+        url: `/cart/items/${item.id}`,
+    });
+
+    const handleQuantityChange = (quantity) => {
+        const maxQuantity = Math.min(50, Number(item.stock ?? 50));
+
+        if (quantity < 1 || quantity > maxQuantity) {
+            return;
+        }
+
+        updateCartItem(
+            { quantity },
+            {
+                onSuccess: async () => {
+                    await onUpdated();
+                },
+                onError: (error) => {
+                    toast.error(
+                        error?.response?.data?.message ||
+                            (isArabic
+                                ? "تعذر تحديث كمية الكعكة"
+                                : "Unable to update cart item"),
+                    );
+                },
+            },
+        );
+    };
+
+    const handleRemove = () => {
+        if (isUpdating || isRemoving) {
+            return;
+        }
+
+        deleteCartItem(undefined, {
+            onSuccess: async () => {
+                toast.success(
+                    isArabic
+                        ? "تمت إزالة الكعكة من السلة"
+                        : "Cake removed from cart",
+                );
+
+                await onUpdated();
+            },
+            onError: (error) => {
+                toast.error(
+                    error?.response?.data?.message ||
+                        (isArabic
+                            ? "تعذر إزالة الكعكة من السلة"
+                            : "Unable to remove cart item"),
+                );
+            },
+        });
+    };
+
+    const maxQuantity = Math.min(50, Number(item.stock ?? 50));
+
     const lineTotal = item.discountedPrice * item.quantity;
+
+    const savingsPerItem = Math.max(0, item.price - item.discountedPrice);
+
+    const totalSavings = savingsPerItem * item.quantity;
+
+    const hasDiscount = item.discountPercentage > 0 && savingsPerItem > 0;
 
     return (
         <div
@@ -799,13 +885,17 @@ const CartItem = ({
         >
             <div className="flex gap-2.5 sm:gap-3 md:gap-4">
                 <div className="flex shrink-0 items-start pt-1">
-                    <Checkbox checked={selected} onCheckedChange={onToggle} />
+                    <Checkbox
+                        checked={selected}
+                        disabled={isUpdating || isRemoving}
+                        onCheckedChange={onToggle}
+                    />
                 </div>
 
                 <div className="size-16 shrink-0 overflow-hidden rounded-none rounded-tl-xl rounded-br-xl bg-secondary sm:size-20 md:size-28">
                     <img
                         src={item.image}
-                        alt={item.name[language]}
+                        alt={item.name?.[language] || ""}
                         className="h-full w-full object-cover"
                     />
                 </div>
@@ -814,11 +904,11 @@ const CartItem = ({
                     <div className="flex items-start justify-between gap-2 sm:gap-3">
                         <div className="min-w-0">
                             <p className="text-[9px] font-bold uppercase tracking-[0.12em] text-primary sm:text-[10px]">
-                                {item.size[language]}
+                                {item.weightSize}
                             </p>
 
                             <h2 className="mt-1 line-clamp-2 text-xs font-bold leading-4 sm:text-sm sm:leading-5 md:text-lg md:leading-6">
-                                {item.name[language]}
+                                {item.name?.[language]}
                             </h2>
 
                             <p className="mt-1 text-[11px] text-muted-foreground sm:text-xs">
@@ -832,10 +922,15 @@ const CartItem = ({
                             type="button"
                             variant="ghost"
                             size="icon"
-                            onClick={onRemove}
+                            disabled={isUpdating || isRemoving}
+                            onClick={handleRemove}
                             className="size-7 shrink-0 text-muted-foreground hover:text-destructive"
                         >
-                            <Trash2 className="size-3.5 sm:size-4" />
+                            {isRemoving ? (
+                                <Loader2 className="size-3.5 animate-spin sm:size-4" />
+                            ) : (
+                                <Trash2 className="size-3.5 sm:size-4" />
+                            )}
                         </Button>
                     </div>
 
@@ -844,19 +939,29 @@ const CartItem = ({
                             <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
                                 <span
                                     dir="ltr"
-                                    className="text-xs font-bold sm:text-sm"
+                                    className="text-xs font-bold text-primary sm:text-sm"
                                 >
-                                    {item.discountedPrice.toFixed(3)} KWD
+                                    {formatPrice(item.discountedPrice)}
                                 </span>
 
-                                {item.discountPercentage > 0 && (
-                                    <span
-                                        dir="ltr"
-                                        className="text-[10px] text-muted-foreground line-through sm:text-xs"
-                                    >
-                                        {item.price.toFixed(3)} KWD
-                                    </span>
+                                {hasDiscount && (
+                                    <>
+                                        <span
+                                            dir="ltr"
+                                            className="text-[10px] text-muted-foreground line-through sm:text-xs"
+                                        >
+                                            {formatPrice(item.price)}
+                                        </span>
+
+                                        <span className="rounded-full bg-primary/10 px-2 py-0.5 text-[9px] font-bold text-primary sm:text-[10px]">
+                                            -{item.discountPercentage}%
+                                        </span>
+                                    </>
                                 )}
+
+                                <span className="text-[10px] font-semibold text-muted-foreground">
+                                    × {item.quantity}
+                                </span>
                             </div>
 
                             <div className="mt-1 flex items-baseline gap-1.5 sm:gap-2">
@@ -868,16 +973,35 @@ const CartItem = ({
                                     dir="ltr"
                                     className="text-sm font-black sm:text-base"
                                 >
-                                    {lineTotal.toFixed(3)} KWD
+                                    {formatPrice(lineTotal)}
                                 </span>
                             </div>
+
+                            {hasDiscount && totalSavings > 0 && (
+                                <p className="mt-1 text-[10px] font-semibold text-primary sm:text-[11px]">
+                                    {isArabic
+                                        ? `وفرت ${formatPrice(totalSavings)}`
+                                        : `You save ${formatPrice(totalSavings)}`}
+                                </p>
+                            )}
                         </div>
 
-                        <QuantityControl
-                            quantity={item.quantity}
-                            onIncrease={onIncrease}
-                            onDecrease={onDecrease}
-                        />
+                        {isUpdating ? (
+                            <div className="flex h-9 w-[104px] shrink-0 items-center justify-center rounded-none rounded-tl-lg rounded-br-lg border border-border bg-background">
+                                <Loader2 className="size-4 animate-spin text-primary" />
+                            </div>
+                        ) : (
+                            <QuantityControl
+                                quantity={item.quantity}
+                                maximumQuantity={maxQuantity}
+                                onIncrease={() =>
+                                    handleQuantityChange(item.quantity + 1)
+                                }
+                                onDecrease={() =>
+                                    handleQuantityChange(item.quantity - 1)
+                                }
+                            />
+                        )}
                     </div>
                 </div>
             </div>
@@ -885,38 +1009,142 @@ const CartItem = ({
     );
 };
 
-const FeaturedAddOn = ({
-    addOn,
-    language,
-    selected,
-    quantity,
-    onToggle,
-    onIncrease,
-    onDecrease,
-}) => {
-    const handleCardClick = (event) => {
-        if (event.target.closest("button")) {
+const FeaturedAddOn = ({ addOn, language, selected, quantity, onUpdated }) => {
+    const isArabic = language === "ar";
+
+    const { mutate: addCartAddOn, isPending: isAdding } = usePost({
+        url: "/cart/add-ons",
+    });
+
+    const { mutate: updateCartAddOn, isPending: isUpdating } = usePatch({
+        url: `/cart/add-ons/${addOn.id}`,
+    });
+
+    const { mutate: removeCartAddOn, isPending: isRemoving } = useDelete({
+        url: `/cart/add-ons/${addOn.id}`,
+    });
+
+    const isPending = isAdding || isUpdating || isRemoving;
+
+    const handleAdd = () => {
+        if (isPending || selected) {
             return;
         }
 
-        onToggle();
+        addCartAddOn(
+            {
+                addOnId: addOn.id,
+                quantity: 1,
+            },
+            {
+                onSuccess: async () => {
+                    toast.success(
+                        isArabic
+                            ? "تمت إضافة الإضافة إلى السلة"
+                            : "Add-on added to cart",
+                    );
+
+                    await onUpdated();
+                },
+                onError: (error) => {
+                    toast.error(
+                        error?.response?.data?.message ||
+                            (isArabic
+                                ? "تعذر إضافة الإضافة"
+                                : "Unable to add add-on"),
+                    );
+                },
+            },
+        );
+    };
+
+    const handleIncrease = () => {
+        if (isPending) {
+            return;
+        }
+
+        if (!selected) {
+            handleAdd();
+            return;
+        }
+
+        if (quantity >= 50) {
+            return;
+        }
+
+        updateCartAddOn(
+            {
+                quantity: quantity + 1,
+            },
+            {
+                onSuccess: async () => {
+                    await onUpdated();
+                },
+                onError: (error) => {
+                    toast.error(
+                        error?.response?.data?.message ||
+                            (isArabic
+                                ? "تعذر تحديث كمية الإضافة"
+                                : "Unable to update add-on quantity"),
+                    );
+                },
+            },
+        );
+    };
+
+    const handleDecrease = () => {
+        if (isPending || !selected) {
+            return;
+        }
+
+        if (quantity > 1) {
+            updateCartAddOn(
+                {
+                    quantity: quantity - 1,
+                },
+                {
+                    onSuccess: async () => {
+                        await onUpdated();
+                    },
+                    onError: (error) => {
+                        toast.error(
+                            error?.response?.data?.message ||
+                                (isArabic
+                                    ? "تعذر تحديث كمية الإضافة"
+                                    : "Unable to update add-on quantity"),
+                        );
+                    },
+                },
+            );
+
+            return;
+        }
+
+        removeCartAddOn(undefined, {
+            onSuccess: async () => {
+                toast.success(
+                    isArabic ? "تمت إزالة الإضافة" : "Add-on removed",
+                );
+
+                await onUpdated();
+            },
+            onError: (error) => {
+                toast.error(
+                    error?.response?.data?.message ||
+                        (isArabic
+                            ? "تعذر إزالة الإضافة"
+                            : "Unable to remove add-on"),
+                );
+            },
+        });
     };
 
     return (
         <div
-            role="button"
-            tabIndex={0}
-            onClick={handleCardClick}
-            onKeyDown={(event) => {
-                if (event.key === "Enter" || event.key === " ") {
-                    event.preventDefault();
-                    onToggle();
-                }
-            }}
-            className={`min-w-0 cursor-pointer overflow-hidden rounded-none rounded-tl-2xl rounded-br-2xl border transition-all ${
+            className={`min-w-0 overflow-hidden rounded-none rounded-tl-2xl rounded-br-2xl border transition-all ${
                 selected
                     ? "border-primary/60 bg-primary/[0.05]"
-                    : "border-border bg-card hover:border-primary/30"
+                    : "border-border bg-card"
             }`}
         >
             <div className="relative aspect-[1.45] overflow-hidden bg-secondary">
@@ -927,10 +1155,7 @@ const FeaturedAddOn = ({
                 />
 
                 <div className="absolute left-2 top-2 sm:left-3 sm:top-3">
-                    <SelectionIndicator
-                        selected={selected}
-                        onToggle={onToggle}
-                    />
+                    <SelectionIndicator selected={selected} />
                 </div>
             </div>
 
@@ -944,60 +1169,171 @@ const FeaturedAddOn = ({
                         dir="ltr"
                         className="mt-1 text-xs font-bold text-primary sm:text-sm"
                     >
-                        +{addOn.price.toFixed(3)} KWD
+                        +{formatPrice(addOn.price)}
                     </p>
                 </div>
 
                 <div className="mt-3 flex flex-col gap-2 border-t border-border/70 pt-3 sm:mt-4 sm:gap-2.5">
                     <span className="text-[10px] font-semibold text-muted-foreground sm:text-xs">
-                        {language === "ar" ? "الكمية" : "Quantity"}
+                        {isArabic ? "الكمية" : "Quantity"}
                     </span>
 
-                    <QuantityControl
-                        quantity={selected ? quantity : 0}
-                        onIncrease={onIncrease}
-                        onDecrease={onDecrease}
-                        disabled={false}
-                        compact
-                    />
+                    {isPending ? (
+                        <div className="flex h-8 w-[92px] items-center justify-center rounded-none rounded-tl-lg rounded-br-lg border border-border bg-background">
+                            <Loader2 className="size-3.5 animate-spin text-primary" />
+                        </div>
+                    ) : (
+                        <QuantityControl
+                            quantity={selected ? quantity : 0}
+                            onIncrease={handleIncrease}
+                            onDecrease={handleDecrease}
+                            maximumQuantity={50}
+                            allowZero
+                            compact
+                        />
+                    )}
                 </div>
             </div>
         </div>
     );
 };
 
-const AddOnCard = ({
-    addOn,
-    language,
-    selected,
-    quantity,
-    onToggle,
-    onIncrease,
-    onDecrease,
-}) => {
-    const handleCardClick = (event) => {
-        if (event.target.closest("button")) {
+const AddOnCard = ({ addOn, language, selected, quantity, onUpdated }) => {
+    const isArabic = language === "ar";
+
+    const { mutate: addCartAddOn, isPending: isAdding } = usePost({
+        url: "/cart/add-ons",
+    });
+
+    const { mutate: updateCartAddOn, isPending: isUpdating } = usePatch({
+        url: `/cart/add-ons/${addOn.id}`,
+    });
+
+    const { mutate: removeCartAddOn, isPending: isRemoving } = useDelete({
+        url: `/cart/add-ons/${addOn.id}`,
+    });
+
+    const isPending = isAdding || isUpdating || isRemoving;
+
+    const handleAdd = () => {
+        if (isPending || selected) {
             return;
         }
 
-        onToggle();
+        addCartAddOn(
+            {
+                addOnId: addOn.id,
+                quantity: 1,
+            },
+            {
+                onSuccess: async () => {
+                    toast.success(
+                        isArabic
+                            ? "تمت إضافة الإضافة إلى السلة"
+                            : "Add-on added to cart",
+                    );
+
+                    await onUpdated();
+                },
+                onError: (error) => {
+                    toast.error(
+                        error?.response?.data?.message ||
+                            (isArabic
+                                ? "تعذر إضافة الإضافة"
+                                : "Unable to add add-on"),
+                    );
+                },
+            },
+        );
+    };
+
+    const handleIncrease = () => {
+        if (isPending) {
+            return;
+        }
+
+        if (!selected) {
+            handleAdd();
+            return;
+        }
+
+        if (quantity >= 50) {
+            return;
+        }
+
+        updateCartAddOn(
+            {
+                quantity: quantity + 1,
+            },
+            {
+                onSuccess: async () => {
+                    await onUpdated();
+                },
+                onError: (error) => {
+                    toast.error(
+                        error?.response?.data?.message ||
+                            (isArabic
+                                ? "تعذر تحديث كمية الإضافة"
+                                : "Unable to update add-on quantity"),
+                    );
+                },
+            },
+        );
+    };
+
+    const handleDecrease = () => {
+        if (isPending || !selected) {
+            return;
+        }
+
+        if (quantity > 1) {
+            updateCartAddOn(
+                {
+                    quantity: quantity - 1,
+                },
+                {
+                    onSuccess: async () => {
+                        await onUpdated();
+                    },
+                    onError: (error) => {
+                        toast.error(
+                            error?.response?.data?.message ||
+                                (isArabic
+                                    ? "تعذر تحديث كمية الإضافة"
+                                    : "Unable to update add-on quantity"),
+                        );
+                    },
+                },
+            );
+
+            return;
+        }
+
+        removeCartAddOn(undefined, {
+            onSuccess: async () => {
+                toast.success(
+                    isArabic ? "تمت إزالة الإضافة" : "Add-on removed",
+                );
+
+                await onUpdated();
+            },
+            onError: (error) => {
+                toast.error(
+                    error?.response?.data?.message ||
+                        (isArabic
+                            ? "تعذر إزالة الإضافة"
+                            : "Unable to remove add-on"),
+                );
+            },
+        });
     };
 
     return (
         <div
-            role="button"
-            tabIndex={0}
-            onClick={handleCardClick}
-            onKeyDown={(event) => {
-                if (event.key === "Enter" || event.key === " ") {
-                    event.preventDefault();
-                    onToggle();
-                }
-            }}
-            className={`min-w-0 cursor-pointer rounded-none rounded-tl-2xl rounded-br-2xl border p-3 transition-all ${
+            className={`min-w-0 rounded-none rounded-tl-2xl rounded-br-2xl border p-3 transition-all ${
                 selected
                     ? "border-primary/50 bg-primary/[0.04]"
-                    : "border-border bg-card hover:border-primary/30"
+                    : "border-border bg-card"
             }`}
         >
             <div className="flex gap-3">
@@ -1015,16 +1351,9 @@ const AddOnCard = ({
                             <h3 className="text-sm font-bold">
                                 {addOn.name[language]}
                             </h3>
-
-                            <p className="mt-1 line-clamp-1 text-xs text-muted-foreground">
-                                {addOn.description[language]}
-                            </p>
                         </div>
 
-                        <SelectionIndicator
-                            selected={selected}
-                            onToggle={onToggle}
-                        />
+                        <SelectionIndicator selected={selected} />
                     </div>
 
                     <div className="mt-3 flex items-center justify-between gap-3">
@@ -1032,16 +1361,23 @@ const AddOnCard = ({
                             dir="ltr"
                             className="text-xs font-bold text-primary"
                         >
-                            +{addOn.price.toFixed(3)} KWD
+                            +{formatPrice(addOn.price)}
                         </span>
 
-                        <QuantityControl
-                            quantity={selected ? quantity : 0}
-                            onIncrease={onIncrease}
-                            onDecrease={onDecrease}
-                            disabled={false}
-                            compact
-                        />
+                        {isPending ? (
+                            <div className="flex h-8 w-[92px] items-center justify-center rounded-none rounded-tl-lg rounded-br-lg border border-border bg-background">
+                                <Loader2 className="size-3.5 animate-spin text-primary" />
+                            </div>
+                        ) : (
+                            <QuantityControl
+                                quantity={selected ? quantity : 0}
+                                onIncrease={handleIncrease}
+                                onDecrease={handleDecrease}
+                                maximumQuantity={50}
+                                allowZero
+                                compact
+                            />
+                        )}
                     </div>
                 </div>
             </div>
@@ -1049,45 +1385,47 @@ const AddOnCard = ({
     );
 };
 
-const SelectionIndicator = ({ selected, onToggle }) => {
+const SelectionIndicator = ({ selected }) => {
     return (
-        <button
-            type="button"
-            aria-label={selected ? "Remove add-on" : "Select add-on"}
-            onClick={(event) => {
-                event.stopPropagation();
-                onToggle();
-            }}
+        <div
+            aria-hidden="true"
             className={`flex size-6 shrink-0 items-center justify-center rounded-full border-2 transition-all sm:size-7 ${
                 selected
                     ? "border-primary bg-primary text-primary-foreground"
-                    : "border-muted-foreground/35 bg-background hover:border-primary/60"
+                    : "border-muted-foreground/35 bg-background"
             }`}
         >
             {selected && <Check className="size-3 sm:size-3.5" />}
-        </button>
+        </div>
     );
 };
 
 const QuantityControl = ({
     quantity,
+    maximumQuantity = 50,
     onIncrease,
     onDecrease,
     disabled = false,
     compact = false,
+    allowZero = false,
 }) => {
+    const minimumQuantity = allowZero ? 0 : 1;
+
     return (
         <div
             className={`flex w-fit shrink-0 items-center rounded-none rounded-tl-lg rounded-br-lg border border-border bg-background ${
                 compact ? "h-8" : "h-9"
             } ${disabled ? "opacity-50" : ""}`}
-            onClick={(event) => event.stopPropagation()}
         >
             <Button
                 type="button"
                 variant="ghost"
                 size="icon"
-                disabled={disabled || quantity <= 1}
+                disabled={
+                    disabled ||
+                    quantity <= minimumQuantity ||
+                    maximumQuantity < 1
+                }
                 onClick={onDecrease}
                 className={`${compact ? "size-7" : "size-8"} rounded-none`}
             >
@@ -1107,7 +1445,7 @@ const QuantityControl = ({
                 type="button"
                 variant="ghost"
                 size="icon"
-                disabled={disabled || quantity >= 50}
+                disabled={disabled || quantity >= maximumQuantity}
                 onClick={onIncrease}
                 className={`${compact ? "size-7" : "size-8"} rounded-none`}
             >
@@ -1117,42 +1455,108 @@ const QuantityControl = ({
     );
 };
 
-const SummaryItem = ({ name, quantity, unitPrice, lineTotal }) => {
+const SummaryItem = ({
+    image,
+    name,
+    quantity,
+    unitPrice,
+    originalPrice,
+    discountPercentage,
+    lineTotal,
+}) => {
+    const hasDiscount =
+        Number(discountPercentage ?? 0) > 0 &&
+        Number(originalPrice ?? 0) > Number(unitPrice ?? 0);
+
     return (
-        <div className="rounded-none rounded-tl-xl rounded-br-xl bg-secondary/35 p-3">
-            <div className="flex items-start justify-between gap-3">
-                <p className="min-w-0 truncate text-sm font-semibold">
-                    {name}
-                </p>
+        <div className="flex items-center gap-3 rounded-none rounded-tl-xl rounded-br-xl bg-secondary/35 p-2.5">
+            {image && (
+                <div className="size-12 shrink-0 overflow-hidden rounded-none rounded-tl-lg rounded-br-lg bg-secondary">
+                    <img
+                        src={image}
+                        alt={name}
+                        className="h-full w-full object-cover"
+                    />
+                </div>
+            )}
 
-                <span dir="ltr" className="shrink-0 text-sm font-black">
-                    {lineTotal.toFixed(3)} KWD
-                </span>
-            </div>
+            <div className="min-w-0 flex-1">
+                <div className="flex items-start justify-between gap-2">
+                    <p className="line-clamp-1 text-sm font-semibold">{name}</p>
 
-            <div className="mt-1.5 flex items-center justify-between gap-3">
-                <span className="text-[11px] text-muted-foreground">
-                    Item total
-                </span>
+                    <span dir="ltr" className="shrink-0 text-sm font-black">
+                        {formatPrice(lineTotal)}
+                    </span>
+                </div>
 
-                <span dir="ltr" className="text-[11px] text-muted-foreground">
-                    {quantity} × {unitPrice.toFixed(3)} KWD
-                </span>
+                <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5">
+                    <span
+                        dir="ltr"
+                        className="text-[11px] font-semibold text-muted-foreground"
+                    >
+                        {formatPrice(unitPrice)} × {quantity}
+                    </span>
+
+                    {hasDiscount && (
+                        <>
+                            <span
+                                dir="ltr"
+                                className="text-[10px] text-muted-foreground line-through"
+                            >
+                                {formatPrice(originalPrice)}
+                            </span>
+
+                            <span className="rounded-full bg-primary/10 px-1.5 py-0.5 text-[9px] font-bold text-primary">
+                                -{discountPercentage}%
+                            </span>
+                        </>
+                    )}
+                </div>
             </div>
         </div>
     );
 };
 
-const SummaryRow = ({ label, value, free = false }) => {
+const SummaryRow = ({
+    label,
+    value,
+    hint,
+    free = false,
+    discount = false,
+    isArabic = false,
+}) => {
     return (
         <div className="flex items-center justify-between gap-4">
-            <span className="text-muted-foreground">{label}</span>
+            <span
+                className={`flex items-center gap-1.5 ${
+                    discount
+                        ? "font-semibold text-primary"
+                        : "text-muted-foreground"
+                }`}
+            >
+                {label}
+
+                {hint && (
+                    <span className="text-[11px] font-medium text-muted-foreground/70">
+                        ({hint})
+                    </span>
+                )}
+            </span>
 
             {free ? (
-                <span className="font-semibold text-primary">Free</span>
+                <span className="rounded-full bg-primary/10 px-2 py-0.5 text-xs font-bold text-primary">
+                    {isArabic ? "مجاني" : "Free"}
+                </span>
             ) : (
-                <span dir="ltr" className="font-semibold">
-                    {value.toFixed(3)} KWD
+                <span
+                    dir="ltr"
+                    className={
+                        discount
+                            ? "font-semibold text-primary"
+                            : "font-semibold"
+                    }
+                >
+                    {discount ? `- ${formatPrice(value)}` : formatPrice(value)}
                 </span>
             )}
         </div>

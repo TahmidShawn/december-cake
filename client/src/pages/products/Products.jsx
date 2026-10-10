@@ -1,5 +1,7 @@
-import { Filter, X } from "lucide-react";
-import { useMemo, useState } from "react";
+import { Filter, Loader2, Plus, X } from "lucide-react";
+import { Link } from "react-router";
+import { useState } from "react";
+import { useParams, useSearchParams } from "react-router";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -17,157 +19,20 @@ import {
     SheetTitle,
     SheetTrigger,
 } from "@/components/ui/sheet";
+import { useLanguage } from "@/context/LanguageContext";
+import useGet from "@/hooks/useGet";
+import useAddToCart from "@/hooks/useAddToCart";
 
 import ProductFilters from "./ProductFilters";
-import { useLanguage } from "@/context/LanguageContext";
-
-const products = [
-    {
-        id: 1,
-        name: {
-            en: "Classic Chocolate Cake",
-            ar: "كعكة الشوكولاتة الكلاسيكية",
-        },
-        categoryName: {
-            en: "Chocolate",
-            ar: "شوكولاتة",
-        },
-        category: "chocolate-cakes",
-        price: 8.5,
-        oldPrice: 11,
-        size: ["small", "medium"],
-        delivery: ["today", "free"],
-        image: "https://images.unsplash.com/photo-1571115177098-24ec42ed204d?w=800&auto=format&fit=crop&q=80",
-    },
-    {
-        id: 2,
-        name: {
-            en: "Strawberry Celebration",
-            ar: "كعكة الفراولة للاحتفال",
-        },
-        categoryName: {
-            en: "Birthday",
-            ar: "أعياد الميلاد",
-        },
-        category: "birthday-cakes",
-        price: 9.5,
-        oldPrice: 12,
-        size: ["small", "medium"],
-        delivery: ["today"],
-        image: "https://images.unsplash.com/photo-1578985545062-69928b1d9587?w=800&auto=format&fit=crop&q=80",
-    },
-    {
-        id: 3,
-        name: {
-            en: "Red Velvet Dream",
-            ar: "ريد فلفت دريم",
-        },
-        categoryName: {
-            en: "Red Velvet",
-            ar: "ريد فلفت",
-        },
-        category: "red-velvet",
-        price: 10,
-        oldPrice: 13,
-        size: ["medium"],
-        delivery: ["today", "free"],
-        image: "https://images.unsplash.com/photo-1530648672449-81f6c723e2f1?w=800&auto=format&fit=crop&q=80",
-    },
-    {
-        id: 4,
-        name: {
-            en: "Berry Cheesecake",
-            ar: "تشيز كيك بالتوت",
-        },
-        categoryName: {
-            en: "Cheesecake",
-            ar: "تشيز كيك",
-        },
-        category: "cheesecakes",
-        price: 8,
-        oldPrice: 10.5,
-        size: ["small", "medium"],
-        delivery: ["free"],
-        image: "https://images.unsplash.com/photo-1565958011703-44f9829ba187?w=800&auto=format&fit=crop&q=80",
-    },
-    {
-        id: 5,
-        name: {
-            en: "Golden Caramel Cake",
-            ar: "كعكة الكراميل الذهبية",
-        },
-        categoryName: {
-            en: "Caramel",
-            ar: "كراميل",
-        },
-        category: "caramel-cakes",
-        price: 9,
-        oldPrice: 11.5,
-        size: ["small", "medium"],
-        delivery: ["today"],
-        image: "https://images.unsplash.com/photo-1606890737304-57a1ca8a5b62?w=800&auto=format&fit=crop&q=80",
-    },
-    {
-        id: 6,
-        name: {
-            en: "Fresh Fruit Cake",
-            ar: "كعكة الفواكه الطازجة",
-        },
-        categoryName: {
-            en: "Fruit",
-            ar: "فواكه",
-        },
-        category: "fruit-cakes",
-        price: 10.5,
-        oldPrice: 14,
-        size: ["medium"],
-        delivery: ["free"],
-        image: "https://images.unsplash.com/photo-1464349095431-e9a21285b5f3?w=800&auto=format&fit=crop&q=80",
-    },
-    {
-        id: 7,
-        name: {
-            en: "Vanilla Mini Cake",
-            ar: "كعكة الفانيليا الصغيرة",
-        },
-        categoryName: {
-            en: "Mini Cake",
-            ar: "كعكة صغيرة",
-        },
-        category: "mini-cakes",
-        price: 5.5,
-        oldPrice: 7,
-        size: ["small"],
-        delivery: ["today", "free"],
-        image: "https://images.unsplash.com/photo-1488477181946-6428a0291777?w=800&auto=format&fit=crop&q=80",
-    },
-    {
-        id: 8,
-        name: {
-            en: "Wedding White Cake",
-            ar: "كعكة الزفاف البيضاء",
-        },
-        categoryName: {
-            en: "Wedding",
-            ar: "زفاف",
-        },
-        category: "wedding-cakes",
-        price: 18,
-        oldPrice: 18,
-        size: ["medium"],
-        delivery: ["today"],
-        image: "https://images.unsplash.com/photo-1535254973040-607b474cb50d?w=800&auto=format&fit=crop&q=80",
-    },
-];
 
 const initialFilters = {
-    category: null,
     price: null,
     size: [],
-    delivery: [],
 };
 
 const Products = () => {
+    const { slug } = useParams();
+    const [searchParams] = useSearchParams();
     const { language } = useLanguage();
 
     const [filters, setFilters] = useState(initialFilters);
@@ -175,6 +40,60 @@ const Products = () => {
     const [sort, setSort] = useState("featured");
 
     const isArabic = language === "ar";
+
+    // Search term comes from the URL (?search=...) via the navbar search.
+    const search = searchParams.get("search")?.trim() || "";
+
+    /*
+     * The category comes from the URL:
+     *
+     * /category/birtday  ->  slug = "birtday"
+     *
+     * With no slug (/products or /products?search=...), we browse all
+     * active cakes and optionally filter by the search term.
+     *
+     * Price and size remain local filter state.
+     */
+    const params = {
+        ...(slug && { category: slug }),
+        ...(search && { search }),
+        ...(filters.price && {
+            price: filters.price,
+        }),
+        ...(filters.size.length > 0 && {
+            size: filters.size.join(","),
+        }),
+        ...(sort !== "featured" && {
+            sort,
+        }),
+    };
+
+    const {
+        data: cakesResponse,
+        isLoading,
+        isError,
+    } = useGet({
+        url: "/cakes",
+        params,
+        queryKey: ["cakes", "category", slug, search, params],
+        enabled: Boolean(slug || search),
+    });
+
+    const cakes = cakesResponse?.data || [];
+
+    const {
+        addToCart,
+        isPending: isAddingToCart,
+        pendingCakeId,
+    } = useAddToCart();
+
+    const handleAddToCart = (event, cake) => {
+        // The whole card is a link, so keep the "+" from navigating.
+        event.preventDefault();
+        event.stopPropagation();
+
+        addToCart(cake._id);
+    };
 
     const handleFilterChange = (nextFilters) => {
         setFilters(nextFilters);
@@ -184,131 +103,10 @@ const Products = () => {
         setFilters(initialFilters);
     };
 
-    const filteredProducts = useMemo(() => {
-        let result = [...products];
-
-        if (filters.category) {
-            result = result.filter(
-                (product) => product.category === filters.category,
-            );
-        }
-
-        if (filters.price) {
-            const [min, max] = filters.price.split("-").map(Number);
-
-            result = result.filter(
-                (product) => product.price >= min && product.price <= max,
-            );
-        }
-
-        if (filters.size.length > 0) {
-            result = result.filter((product) =>
-                filters.size.some((size) => product.size.includes(size)),
-            );
-        }
-
-        if (filters.delivery.length > 0) {
-            result = result.filter((product) =>
-                filters.delivery.every((delivery) =>
-                    product.delivery.includes(delivery),
-                ),
-            );
-        }
-
-        if (sort === "price-low") {
-            result.sort((a, b) => a.price - b.price);
-        }
-
-        if (sort === "price-high") {
-            result.sort((a, b) => b.price - a.price);
-        }
-
-        if (sort === "name") {
-            result.sort((a, b) =>
-                a.name[language].localeCompare(b.name[language]),
-            );
-        }
-
-        return result;
-    }, [filters, sort, language]);
-
     const selectedFilters = [];
 
-    if (filters.category) {
-        const category = [
-            {
-                value: "birthday-cakes",
-                en: "Birthday Cakes",
-                ar: "كعكات أعياد الميلاد",
-            },
-            {
-                value: "wedding-cakes",
-                en: "Wedding Cakes",
-                ar: "كعكات الزفاف",
-            },
-            {
-                value: "chocolate-cakes",
-                en: "Chocolate Cakes",
-                ar: "كعكات الشوكولاتة",
-            },
-            {
-                value: "red-velvet",
-                en: "Red Velvet",
-                ar: "ريد فلفت",
-            },
-            {
-                value: "cheesecakes",
-                en: "Cheesecakes",
-                ar: "كعكات الجبن",
-            },
-            {
-                value: "cupcakes",
-                en: "Cupcakes",
-                ar: "كب كيك",
-            },
-            {
-                value: "mini-cakes",
-                en: "Mini Cakes",
-                ar: "كعكات صغيرة",
-            },
-            {
-                value: "fruit-cakes",
-                en: "Fruit Cakes",
-                ar: "كعكات الفواكه",
-            },
-            {
-                value: "custom-cakes",
-                en: "Custom Cakes",
-                ar: "كعكات مخصصة",
-            },
-            {
-                value: "caramel-cakes",
-                en: "Caramel Cakes",
-                ar: "كعكات الكراميل",
-            },
-            {
-                value: "tarts",
-                en: "Tarts",
-                ar: "تارت",
-            },
-            {
-                value: "seasonal-cakes",
-                en: "Seasonal Cakes",
-                ar: "كعكات موسمية",
-            },
-        ].find((item) => item.value === filters.category);
-
-        if (category) {
-            selectedFilters.push({
-                type: "category",
-                value: category.value,
-                label: category[language],
-            });
-        }
-    }
-
     if (filters.price) {
-        const price = {
+        const priceLabels = {
             "0-5": {
                 en: "0 – 5 KWD",
                 ar: "٠ – ٥ د.ك",
@@ -325,7 +123,9 @@ const Products = () => {
                 en: "15 – 100 KWD",
                 ar: "١٥ – ١٠٠ د.ك",
             },
-        }[filters.price];
+        };
+
+        const price = priceLabels[filters.price];
 
         if (price) {
             selectedFilters.push({
@@ -351,35 +151,22 @@ const Products = () => {
         });
     });
 
-    filters.delivery.forEach((delivery) => {
-        selectedFilters.push({
-            type: "delivery",
-            value: delivery,
-            label:
-                delivery === "today"
-                    ? isArabic
-                        ? "متاح اليوم"
-                        : "Available today"
-                    : isArabic
-                      ? "توصيل مجاني"
-                      : "Free delivery",
-        });
-    });
-
     const removeFilter = (type, value) => {
-        if (type === "category" || type === "price") {
+        if (type === "price") {
             setFilters((current) => ({
                 ...current,
-                [type]: null,
+                price: null,
             }));
 
             return;
         }
 
-        setFilters((current) => ({
-            ...current,
-            [type]: current[type].filter((item) => item !== value),
-        }));
+        if (type === "size") {
+            setFilters((current) => ({
+                ...current,
+                size: current.size.filter((item) => item !== value),
+            }));
+        }
     };
 
     return (
@@ -395,8 +182,8 @@ const Products = () => {
                         <div>
                             <h1 className="text-3xl font-black tracking-[-0.04em] text-foreground md:text-4xl xl:text-5xl">
                                 {isArabic
-                                    ? "اكتشف جميع الكعكات"
-                                    : "Explore all cakes"}
+                                    ? "اكتشف الكعكات"
+                                    : "Explore our cakes"}
                             </h1>
 
                             <p className="mt-2 max-w-xl text-sm leading-6 text-muted-foreground md:text-base">
@@ -406,7 +193,7 @@ const Products = () => {
                             </p>
                         </div>
 
-                        {/* Mobile filter button */}
+                        {/* Mobile filters */}
                         <Sheet
                             open={mobileFiltersOpen}
                             onOpenChange={setMobileFiltersOpen}
@@ -416,7 +203,7 @@ const Products = () => {
                                     type="button"
                                     variant="outline-asymmetric"
                                     size="sm"
-                                    className="py-5 px-8 shrink-0 md:hidden"
+                                    className="shrink-0 px-8 py-5 md:hidden"
                                 >
                                     <Filter className="size-4" />
                                     {isArabic ? "تصفية" : "Filters"}
@@ -453,7 +240,7 @@ const Products = () => {
                 </div>
             </section>
 
-            {/* Products */}
+            {/* Product section */}
             <section className="py-8 md:py-10">
                 <div className="wrapper">
                     <div className="flex items-start gap-8">
@@ -467,13 +254,13 @@ const Products = () => {
                             </div>
                         </aside>
 
-                        {/* Product area */}
+                        {/* Products */}
                         <div className="min-w-0 flex-1">
                             {/* Toolbar */}
                             <div className="mb-4 flex items-center justify-between gap-4">
                                 <p className="text-sm text-muted-foreground">
                                     <span className="font-bold text-foreground">
-                                        {filteredProducts.length}
+                                        {cakes.length}
                                     </span>{" "}
                                     {isArabic ? "منتج" : "products"}
                                 </p>
@@ -553,116 +340,181 @@ const Products = () => {
                                 </div>
                             )}
 
+                            {/* Loading */}
+                            {isLoading && (
+                                <div className="flex min-h-80 items-center justify-center">
+                                    <Loader2 className="size-7 animate-spin text-primary" />
+                                </div>
+                            )}
+
+                            {/* Error */}
+                            {!isLoading && isError && (
+                                <div className="rounded-none rounded-tl-3xl rounded-br-3xl border border-border bg-card px-6 py-16 text-center">
+                                    <h2 className="text-lg font-bold text-foreground">
+                                        {isArabic
+                                            ? "تعذر تحميل الكعكات"
+                                            : "Unable to load cakes"}
+                                    </h2>
+
+                                    <p className="mx-auto mt-2 max-w-sm text-sm leading-6 text-muted-foreground">
+                                        {isArabic
+                                            ? "حدث خطأ أثناء تحميل المنتجات. يرجى المحاولة مرة أخرى."
+                                            : "Something went wrong while loading the products. Please try again."}
+                                    </p>
+                                </div>
+                            )}
+
                             {/* Product grid */}
-                            {filteredProducts.length > 0 ? (
+                            {!isLoading && !isError && cakes.length > 0 && (
                                 <div className="grid grid-cols-2 gap-3 md:grid-cols-3 md:gap-4 xl:grid-cols-4 xl:gap-5">
-                                    {filteredProducts.map((product) => (
-                                        <article
-                                            key={product.id}
-                                            className="group overflow-hidden rounded-none rounded-tl-3xl rounded-br-3xl border border-border bg-card transition-all duration-300 hover:shadow-lg"
-                                        >
-                                            <div className="relative aspect-1.25/1 overflow-hidden bg-secondary">
-                                                <img
-                                                    src={product.image}
-                                                    alt={product.name[language]}
-                                                    className="h-full w-full object-cover transition-transform duration-500 ease-out group-hover:scale-110"
-                                                    loading="lazy"
-                                                />
+                                    {cakes.map((cake) => {
+                                        const price =
+                                            cake.discountedPrice ?? cake.price;
 
-                                                {product.oldPrice >
-                                                    product.price && (
-                                                    <span
-                                                        dir="ltr"
-                                                        className="absolute top-3 inset-s-3 rounded-none rounded-tl-xl rounded-br-xl bg-primary px-2.5 py-1.5 text-[10px] font-bold text-primary-foreground"
-                                                    >
-                                                        -
-                                                        {Math.round(
-                                                            ((product.oldPrice -
-                                                                product.price) /
-                                                                product.oldPrice) *
-                                                                100,
-                                                        )}
-                                                        %
-                                                    </span>
-                                                )}
+                                        const hasDiscount =
+                                            cake.discountedPrice != null &&
+                                            cake.discountedPrice < cake.price;
 
-                                                <span className="absolute bottom-3 inset-e-3 translate-y-2 rounded-none rounded-tl-xl rounded-br-xl border border-white/40 bg-background/90 px-2.5 py-1.5 text-[10px] font-bold text-foreground opacity-0 shadow-sm backdrop-blur-sm transition-all duration-300 group-hover:translate-y-0 group-hover:opacity-100">
-                                                    {product.size.length === 2
-                                                        ? isArabic
-                                                            ? "صغير / متوسط"
-                                                            : "Small / Medium"
-                                                        : product.size[0] ===
-                                                            "small"
-                                                          ? isArabic
-                                                              ? "صغير"
-                                                              : "Small"
-                                                          : isArabic
-                                                            ? "متوسط"
-                                                            : "Medium"}
-                                                </span>
-                                            </div>
+                                        const image =
+                                            cake.images?.[0]?.url || "";
 
-                                            <div className="p-3.5 md:p-4">
-                                                <p className="mb-1.5 text-[10px] font-bold uppercase tracking-[0.16em] text-primary">
-                                                    {
-                                                        product.categoryName[
-                                                            language
-                                                        ]
-                                                    }
-                                                </p>
+                                        return (
+                                            <Link
+                                                to={`/products/${cake.slug}`}
+                                                key={cake._id}
+                                                className="group flex flex-col overflow-hidden rounded-none rounded-tl-3xl rounded-br-3xl border border-border bg-card transition-all duration-300 hover:border-primary/40 hover:shadow-lg"
+                                            >
+                                                <div className="relative aspect-square overflow-hidden bg-secondary">
+                                                    {image ? (
+                                                        <img
+                                                            src={image}
+                                                            alt={
+                                                                cake.name?.[
+                                                                    language
+                                                                ] || ""
+                                                            }
+                                                            className="h-full w-full object-cover transition-transform duration-500 ease-out group-hover:scale-110"
+                                                            loading="lazy"
+                                                        />
+                                                    ) : (
+                                                        <div className="h-full w-full bg-secondary" />
+                                                    )}
 
-                                                <h3 className="truncate text-[13px] font-bold tracking-tight text-card-foreground md:text-[15px]">
-                                                    {product.name[language]}
-                                                </h3>
-
-                                                <div className="mt-3 flex items-baseline gap-1.5">
-                                                    <span className="text-base font-extrabold tracking-tight text-foreground md:text-lg">
-                                                        {product.price.toFixed(
-                                                            2,
-                                                        )}
-                                                    </span>
-
-                                                    {product.oldPrice >
-                                                        product.price && (
-                                                        <span className="text-[10px] text-muted-foreground line-through md:text-xs">
-                                                            {product.oldPrice.toFixed(
-                                                                2,
+                                                    {hasDiscount && (
+                                                        <span
+                                                            dir="ltr"
+                                                            className="absolute top-3 inset-s-3 rounded-none rounded-tl-xl rounded-br-xl bg-primary px-2.5 py-1.5 text-[10px] font-bold text-primary-foreground"
+                                                        >
+                                                            -
+                                                            {Math.round(
+                                                                ((cake.price -
+                                                                    price) /
+                                                                    cake.price) *
+                                                                    100,
                                                             )}
+                                                            %
                                                         </span>
                                                     )}
 
-                                                    <span className="text-[9px] font-semibold text-muted-foreground">
-                                                        KWD
-                                                    </span>
+                                                    {cake.weightSize && (
+                                                        <span className="absolute bottom-3 inset-e-3 rounded-none rounded-tl-xl rounded-br-xl border border-white/40 bg-background/90 px-2.5 py-1.5 text-[10px] font-bold text-foreground shadow-sm backdrop-blur-sm">
+                                                            {cake.weightSize ===
+                                                            "small"
+                                                                ? isArabic
+                                                                    ? "صغير"
+                                                                    : "Small"
+                                                                : isArabic
+                                                                  ? "متوسط"
+                                                                  : "Medium"}
+                                                        </span>
+                                                    )}
                                                 </div>
-                                            </div>
-                                        </article>
-                                    ))}
+
+                                                <div className="flex flex-1 flex-col p-4 md:p-5">
+                                                    {cake.category?.name && (
+                                                        <p className="mb-1.5 text-[10px] font-bold uppercase tracking-[0.16em] text-primary">
+                                                            {
+                                                                cake.category
+                                                                    .name[
+                                                                    language
+                                                                ]
+                                                            }
+                                                        </p>
+                                                    )}
+
+                                                    <h3 className="line-clamp-2 min-h-10 text-sm font-bold tracking-tight text-card-foreground md:text-base">
+                                                        {cake.name?.[language]}
+                                                    </h3>
+
+                                                    <div className="mt-auto flex items-center justify-between gap-2 pt-4">
+                                                        <div className="flex min-w-0 items-baseline gap-1.5">
+                                                            <span className="text-lg font-extrabold tracking-tight text-foreground md:text-xl">
+                                                                {Number(
+                                                                    price,
+                                                                ).toFixed(2)}
+                                                            </span>
+
+                                                            {hasDiscount && (
+                                                                <span className="text-[10px] text-muted-foreground line-through md:text-xs">
+                                                                    {Number(
+                                                                        cake.price,
+                                                                    ).toFixed(2)}
+                                                                </span>
+                                                            )}
+
+                                                            <span className="text-[9px] font-semibold text-muted-foreground">
+                                                                KWD
+                                                            </span>
+                                                        </div>
+
+                                                        <Button
+                                                            type="button"
+                                                            variant="asymmetric"
+                                                            size="icon"
+                                                            aria-label="Add to cart"
+                                                            disabled={
+                                                                isAddingToCart &&
+                                                                pendingCakeId ===
+                                                                    cake._id
+                                                            }
+                                                            onClick={(event) =>
+                                                                handleAddToCart(
+                                                                    event,
+                                                                    cake,
+                                                                )
+                                                            }
+                                                            className="shrink-0"
+                                                        >
+                                                            {isAddingToCart &&
+                                                            pendingCakeId ===
+                                                                cake._id ? (
+                                                                <Loader2 className="size-4 animate-spin" />
+                                                            ) : (
+                                                                <Plus className="size-4" />
+                                                            )}
+                                                        </Button>
+                                                    </div>
+                                                </div>
+                                            </Link>
+                                        );
+                                    })}
                                 </div>
-                            ) : (
+                            )}
+
+                            {/* Empty */}
+                            {!isLoading && !isError && cakes.length === 0 && (
                                 <div className="rounded-none rounded-tl-3xl rounded-br-3xl border border-border bg-card px-6 py-16 text-center">
-                                    <h2 className="mt-4 text-lg font-bold text-foreground">
+                                    <h2 className="text-lg font-bold text-foreground">
                                         {isArabic
                                             ? "لم يتم العثور على كعكات"
                                             : "No cakes found"}
                                     </h2>
 
-                                    <p className="mx-auto mt-2 max-w-sm text-sm text-muted-foreground">
+                                    <p className="mx-auto mt-2 max-w-sm text-sm leading-6 text-muted-foreground">
                                         {isArabic
-                                            ? "جرب إزالة بعض الفلاتر لرؤية المزيد من الكعكات."
-                                            : "Try removing some filters to see more cakes."}
+                                            ? "لا توجد كعكات متاحة في هذه الفئة."
+                                            : "There are no cakes available in this category."}
                                     </p>
-
-                                    <Button
-                                        type="button"
-                                        variant="outline-asymmetric"
-                                        className="mt-5"
-                                        onClick={clearFilters}
-                                    >
-                                        {isArabic
-                                            ? "مسح الفلاتر"
-                                            : "Clear filters"}
-                                    </Button>
                                 </div>
                             )}
                         </div>

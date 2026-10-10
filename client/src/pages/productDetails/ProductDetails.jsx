@@ -3,6 +3,7 @@ import {
     ChevronRight,
     Clock3,
     Home,
+    Loader2,
     Minus,
     PackageCheck,
     Plus,
@@ -11,12 +12,14 @@ import {
     Tag,
     Users,
 } from "lucide-react";
+import { useParams } from "react-router";
 
 import { Button } from "@/components/ui/button";
 import { useLanguage } from "@/context/LanguageContext";
+import useGet from "@/hooks/useGet";
+import useAddToCart from "@/hooks/useAddToCart";
 
 import ProductGallery from "./ProductGallery";
-import productDemoData from "./productDemoData";
 
 const flavorLabels = {
     chocolate: {
@@ -74,12 +77,57 @@ const sizeLabels = {
 
 const ProductDetails = () => {
     const { language } = useLanguage();
-
-    const product = productDemoData;
-    const isArabic = language === "ar";
+    const { slug } = useParams();
 
     const [quantity, setQuantity] = useState(1);
     const [activeTab, setActiveTab] = useState("description");
+
+    const {
+        data: cakeResponse,
+        isLoading,
+        isError,
+    } = useGet({
+        url: `/cakes/${slug}`,
+        queryKey: ["cake", slug],
+        enabled: Boolean(slug),
+    });
+
+    const { addToCart, isPending: isAddingToCart } = useAddToCart();
+
+    const product = cakeResponse?.data;
+    const isArabic = language === "ar";
+
+    if (isLoading) {
+        return (
+            <main className="bg-background pb-16 md:pb-0">
+                <section className="pt-24 md:pt-28">
+                    <div className="wrapper flex min-h-[50vh] items-center justify-center">
+                        <p className="text-sm text-muted-foreground">
+                            {isArabic
+                                ? "جاري تحميل الكعكة..."
+                                : "Loading cake..."}
+                        </p>
+                    </div>
+                </section>
+            </main>
+        );
+    }
+
+    if (isError || !product) {
+        return (
+            <main className="bg-background pb-16 md:pb-0">
+                <section className="pt-24 md:pt-28">
+                    <div className="wrapper flex min-h-[50vh] items-center justify-center">
+                        <p className="text-sm text-destructive">
+                            {isArabic
+                                ? "لم يتم العثور على الكعكة."
+                                : "Cake not found."}
+                        </p>
+                    </div>
+                </section>
+            </main>
+        );
+    }
 
     const flavor = flavorLabels[product.flavor]?.[language] ?? product.flavor;
 
@@ -87,7 +135,11 @@ const ProductDetails = () => {
         sizeLabels[product.weightSize]?.[language] ?? product.weightSize;
 
     const originalPrice = Number(product.price);
-    const discountedPrice = Number(product.discountedPrice);
+
+    const discountedPrice =
+        product.discountPercentage > 0
+            ? originalPrice - (originalPrice * product.discountPercentage) / 100
+            : originalPrice;
 
     const increaseQuantity = () => {
         setQuantity((current) => Math.min(current + 1, product.stock));
@@ -95,6 +147,14 @@ const ProductDetails = () => {
 
     const decreaseQuantity = () => {
         setQuantity((current) => Math.max(current - 1, 1));
+    };
+
+    const handleAddToCart = () => {
+        if (isOutOfStock || isAddingToCart) {
+            return;
+        }
+
+        addToCart(product._id, quantity);
     };
 
     const isOutOfStock = product.stock <= 0;
@@ -163,7 +223,7 @@ const ProductDetails = () => {
                                     <Star className="size-4 fill-primary text-primary" />
 
                                     <span className="text-sm font-bold">
-                                        {product.avgRating.toFixed(1)}
+                                        {Number(product.avgRating).toFixed(1)}
                                     </span>
 
                                     <span className="text-sm text-muted-foreground">
@@ -268,7 +328,9 @@ const ProductDetails = () => {
                                             variant="ghost"
                                             size="icon"
                                             disabled={
-                                                quantity <= 1 || isOutOfStock
+                                                quantity <= 1 ||
+                                                isOutOfStock ||
+                                                isAddingToCart
                                             }
                                             onClick={decreaseQuantity}
                                             className="size-9 rounded-none"
@@ -289,7 +351,8 @@ const ProductDetails = () => {
                                             size="icon"
                                             disabled={
                                                 quantity >= product.stock ||
-                                                isOutOfStock
+                                                isOutOfStock ||
+                                                isAddingToCart
                                             }
                                             onClick={increaseQuantity}
                                             className="size-9 rounded-none"
@@ -303,18 +366,31 @@ const ProductDetails = () => {
                                     type="button"
                                     variant="asymmetric"
                                     size="lg"
-                                    disabled={isOutOfStock}
+                                    disabled={isOutOfStock || isAddingToCart}
+                                    onClick={handleAddToCart}
                                     className="mt-5 h-12 w-full gap-3 text-sm font-bold"
                                 >
-                                    <ShoppingCart className="size-4" />
+                                    {isAddingToCart ? (
+                                        <>
+                                            <Loader2 className="size-4 animate-spin" />
 
-                                    {isOutOfStock
-                                        ? isArabic
-                                            ? "غير متوفر"
-                                            : "Out of stock"
-                                        : isArabic
-                                          ? "أضف إلى السلة"
-                                          : "Add to cart"}
+                                            {isArabic
+                                                ? "جاري الإضافة..."
+                                                : "Adding..."}
+                                        </>
+                                    ) : (
+                                        <>
+                                            <ShoppingCart className="size-4" />
+
+                                            {isOutOfStock
+                                                ? isArabic
+                                                    ? "غير متوفر"
+                                                    : "Out of stock"
+                                                : isArabic
+                                                  ? "أضف إلى السلة"
+                                                  : "Add to cart"}
+                                        </>
+                                    )}
                                 </Button>
                             </div>
                         </div>
@@ -414,7 +490,9 @@ const ProductDetails = () => {
 
                                     <Detail
                                         label={isArabic ? "التقييم" : "Rating"}
-                                        value={`${product.avgRating.toFixed(1)} / 5`}
+                                        value={`${Number(
+                                            product.avgRating,
+                                        ).toFixed(1)} / 5`}
                                     />
 
                                     <Detail
@@ -448,7 +526,9 @@ const ProductDetails = () => {
                                             </div>
 
                                             <span className="text-sm font-bold">
-                                                {product.avgRating.toFixed(1)}
+                                                {Number(
+                                                    product.avgRating,
+                                                ).toFixed(1)}
                                             </span>
 
                                             <span className="text-sm text-muted-foreground">
