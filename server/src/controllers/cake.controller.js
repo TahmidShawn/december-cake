@@ -187,7 +187,7 @@ export const createCake = asyncHandler(async (req, res) => {
 });
 
 export const getCakes = asyncHandler(async (req, res) => {
-    const { category, price, size, sort = "featured" } = req.query;
+    const { category, price, size, sort = "featured", limit } = req.query;
 
     const filter = {
         isActive: true,
@@ -272,6 +272,13 @@ export const getCakes = asyncHandler(async (req, res) => {
         };
     }
 
+    if (sort === "discount") {
+        sortOption = {
+            discountPercentage: -1,
+            createdAt: -1,
+        };
+    }
+
     const pipeline = [
         {
             $match: filter,
@@ -292,11 +299,23 @@ export const getCakes = asyncHandler(async (req, res) => {
         });
     }
 
-    pipeline.push(
-        {
-            $sort: sortOption,
-        },
+    const limitNum = parseInt(limit, 10);
+    const cappedLimit =
+        Number.isFinite(limitNum) && limitNum > 0
+            ? Math.min(limitNum, 100)
+            : null;
 
+    pipeline.push({
+        $sort: sortOption,
+    });
+
+    if (cappedLimit) {
+        pipeline.push({
+            $limit: cappedLimit,
+        });
+    }
+
+    pipeline.push(
         {
             $lookup: {
                 from: "categories",
